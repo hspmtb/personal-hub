@@ -1,0 +1,73 @@
+rules_version = '2';
+
+// Deploy with: firebase deploy --only firestore:rules
+//
+// Model:
+// - Every personal record (tasks, expenses, expenseCategories, documents,
+//   vaultSettings) carries a `uid` field and can only be read/written by
+//   that same authenticated user. No one — including other signed-in
+//   app users — can read another person's data.
+// - `users/{uid}` is the user's own profile; it can be read by any signed-in
+//   user (so names show up in the Users admin list) but only written by an
+//   admin or the user's own onboarding step, and only an admin can change
+//   `role` or `active`.
+// - `allowlist/{email}` (sign-up invitations) can only be written by admins,
+//   but must be readable by an unauthenticated client during sign-up to
+//   check invitation status — so read is public, write is admin-only.
+match /databases/{database}/documents {
+
+  function isSignedIn() {
+    return request.auth != null;
+  }
+
+  function isOwner(uid) {
+    return isSignedIn() && request.auth.uid == uid;
+  }
+
+  function isAdmin() {
+    return isSignedIn() &&
+      exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+  }
+
+  match /tasks/{id} {
+    allow read, delete: if isOwner(resource.data.uid);
+    allow create: if isOwner(request.resource.data.uid);
+    allow update: if isOwner(resource.data.uid) && isOwner(request.resource.data.uid);
+  }
+
+  match /expenses/{id} {
+    allow read, delete: if isOwner(resource.data.uid);
+    allow create: if isOwner(request.resource.data.uid);
+    allow update: if isOwner(resource.data.uid) && isOwner(request.resource.data.uid);
+  }
+
+  match /expenseCategories/{id} {
+    allow read, delete: if isOwner(resource.data.uid);
+    allow create: if isOwner(request.resource.data.uid);
+    allow update: if isOwner(resource.data.uid) && isOwner(request.resource.data.uid);
+  }
+
+  match /documents/{id} {
+    allow read, delete: if isOwner(resource.data.uid);
+    allow create: if isOwner(request.resource.data.uid);
+    allow update: if isOwner(resource.data.uid) && isOwner(request.resource.data.uid);
+  }
+
+  match /vaultSettings/{uid} {
+    allow read, write: if isOwner(uid);
+  }
+
+  match /users/{uid} {
+    allow read: if isSignedIn();
+    allow create: if isOwner(uid); // a brand-new user creates their own profile doc on sign-up
+    allow update: if isAdmin() || (isOwner(uid) && request.resource.data.role == resource.data.role && request.resource.data.active == resource.data.active);
+    allow delete: if isAdmin();
+  }
+
+  match /allowlist/{email} {
+    allow get: if true; // needed so the sign-up screen can check invitation status pre-auth
+    allow list: if isAdmin();
+    allow write: if isAdmin();
+  }
+}
