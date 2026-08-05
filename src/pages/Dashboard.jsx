@@ -4,6 +4,7 @@ import { format } from 'date-fns'
 import { Link } from 'react-router-dom'
 import { db } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext.jsx'
+import { formatIDR } from '../lib/currency'
 
 export default function Dashboard() {
   const { user, profile } = useAuth()
@@ -37,7 +38,7 @@ export default function Dashboard() {
 
       <div className="grid sm:grid-cols-3 gap-4">
         <StatCard label="Today's tasks" value={`${doneCount}/${todayTasks.length}`} sub="completed" to="/tasks" />
-        <StatCard label="Spent this month" value={new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(spentThisMonth)} sub="total expenses" to="/expenses" />
+        <StatCard label="Spent this month" value={formatIDR(spentThisMonth)} sub="total expenses" to="/expenses" />
         <StatCard label="Saved documents" value={docCount} sub="in your vault" to="/documents" />
       </div>
 

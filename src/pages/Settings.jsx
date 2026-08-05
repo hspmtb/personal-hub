@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs,
+  collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, orderBy, serverTimestamp, setDoc,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -9,11 +9,17 @@ import { decryptField, encryptField } from '../lib/vaultCrypto'
 
 const PALETTE = ['#2DD4BF', '#F59E0B', '#F43F5E', '#818CF8', '#34D399', '#FB923C', '#F472B6', '#38BDF8', '#A78BFA', '#FACC15']
 
+async function setRentalSettingsDoc(uid, data) {
+  await setDoc(doc(db, 'rentalSettings', uid), { uid, ...data }, { merge: true })
+}
+
 export default function Settings() {
   return (
     <div className="space-y-8">
       <h1 className="font-display text-lg font-semibold">Settings</h1>
       <ExpenseCategorySettings />
+      <RentalUnitSettings />
+      <RentalBankSettings />
       <VaultSettings />
     </div>
   )
@@ -74,6 +80,185 @@ function ExpenseCategorySettings() {
         ))}
         {categories.length === 0 && <p className="text-slate-500 text-sm">No categories yet — add your first one above.</p>}
       </ul>
+    </section>
+  )
+}
+
+const emptyRentalForm = { noKontrakan: '', namaPenyewa: '', uangSewa: '', iuranRT: '', uangInternet: '', kubikAwal: '' }
+
+function RentalUnitSettings() {
+  const { user } = useAuth()
+  const [units, setUnits] = useState([])
+  const [form, setForm] = useState(emptyRentalForm)
+  const [editingId, setEditingId] = useState(null)
+
+  useEffect(() => {
+    const q = query(collection(db, 'rentalUnits'), where('uid', '==', user.uid), orderBy('createdAt'))
+    return onSnapshot(q, (snap) => setUnits(snap.docs.map((d) => ({ id: d.id, ...d.data() }))))
+  }, [user])
+
+  async function submit(e) {
+    e.preventDefault()
+    if (!form.noKontrakan.trim() || !form.namaPenyewa.trim()) return
+    const payload = {
+      uid: user.uid,
+      noKontrakan: form.noKontrakan.trim(),
+      namaPenyewa: form.namaPenyewa.trim(),
+      uangSewa: Number(form.uangSewa) || 0,
+      iuranRT: Number(form.iuranRT) || 0,
+      uangInternet: Number(form.uangInternet) || 0,
+      kubikAwal: Number(form.kubikAwal) || 0,
+    }
+    if (editingId) {
+      await updateDoc(doc(db, 'rentalUnits', editingId), payload)
+      setEditingId(null)
+    } else {
+      await addDoc(collection(db, 'rentalUnits'), { ...payload, createdAt: serverTimestamp() })
+    }
+    setForm(emptyRentalForm)
+  }
+
+  function startEdit(u) {
+    setEditingId(u.id)
+    setForm({
+      noKontrakan: u.noKontrakan,
+      namaPenyewa: u.namaPenyewa,
+      uangSewa: String(u.uangSewa),
+      iuranRT: String(u.iuranRT),
+      uangInternet: String(u.uangInternet),
+      kubikAwal: String(u.kubikAwal),
+    })
+  }
+
+  async function remove(id) {
+    if (!confirm('Delete this rental unit? Its monthly Kontrakan history will remain but will no longer show in the list.')) return
+    await deleteDoc(doc(db, 'rentalUnits', id))
+    if (editingId === id) { setEditingId(null); setForm(emptyRentalForm) }
+  }
+
+  return (
+    <section className="card p-4 space-y-4">
+      <div>
+        <h2 className="font-display font-medium">Master Kontrakan</h2>
+        <p className="text-xs text-slate-500 mt-1">Data unit sewa yang dipakai di menu Kontrakan setiap bulan.</p>
+      </div>
+
+      <form onSubmit={submit} className="grid gap-3 sm:grid-cols-3">
+        <div>
+          <label className="label mb-1 block">No Kontrakan</label>
+          <input className="input" required value={form.noKontrakan} onChange={(e) => setForm({ ...form, noKontrakan: e.target.value })} placeholder="Kontrakan 1" />
+        </div>
+        <div>
+          <label className="label mb-1 block">Nama Penyewa</label>
+          <input className="input" required value={form.namaPenyewa} onChange={(e) => setForm({ ...form, namaPenyewa: e.target.value })} placeholder="Fikri" />
+        </div>
+        <div>
+          <label className="label mb-1 block">Uang Sewa</label>
+          <input className="input" type="number" min="0" step="1000" value={form.uangSewa} onChange={(e) => setForm({ ...form, uangSewa: e.target.value })} placeholder="2000000" />
+        </div>
+        <div>
+          <label className="label mb-1 block">Iuran RT/RW</label>
+          <input className="input" type="number" min="0" step="1000" value={form.iuranRT} onChange={(e) => setForm({ ...form, iuranRT: e.target.value })} placeholder="50000" />
+        </div>
+        <div>
+          <label className="label mb-1 block">Uang Internet</label>
+          <input className="input" type="number" min="0" step="1000" value={form.uangInternet} onChange={(e) => setForm({ ...form, uangInternet: e.target.value })} placeholder="75000" />
+        </div>
+        <div>
+          <label className="label mb-1 block">Kubik Awal</label>
+          <input className="input" type="number" min="0" step="1" value={form.kubikAwal} onChange={(e) => setForm({ ...form, kubikAwal: e.target.value })} placeholder="35" />
+        </div>
+        <div className="sm:col-span-3 flex gap-2">
+          <button className="btn-primary" type="submit">{editingId ? 'Save' : 'Add Kontrakan'}</button>
+          {editingId && <button type="button" className="btn-ghost" onClick={() => { setEditingId(null); setForm(emptyRentalForm) }}>Cancel</button>}
+        </div>
+      </form>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-slate-500 text-xs uppercase">
+              <th className="py-1.5 pr-3">No Kontrakan</th>
+              <th className="py-1.5 pr-3">Penyewa</th>
+              <th className="py-1.5 pr-3">Uang Sewa</th>
+              <th className="py-1.5 pr-3">Iuran RT/RW</th>
+              <th className="py-1.5 pr-3">Internet</th>
+              <th className="py-1.5 pr-3">Kubik Awal</th>
+              <th className="py-1.5"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {units.map((u) => (
+              <tr key={u.id} className="border-t border-white/5">
+                <td className="py-1.5 pr-3">{u.noKontrakan}</td>
+                <td className="py-1.5 pr-3">{u.namaPenyewa}</td>
+                <td className="py-1.5 pr-3 font-mono">{u.uangSewa.toLocaleString('id-ID')}</td>
+                <td className="py-1.5 pr-3 font-mono">{u.iuranRT.toLocaleString('id-ID')}</td>
+                <td className="py-1.5 pr-3 font-mono">{u.uangInternet.toLocaleString('id-ID')}</td>
+                <td className="py-1.5 pr-3 font-mono">{u.kubikAwal}</td>
+                <td className="py-1.5 text-right whitespace-nowrap">
+                  <button className="text-xs text-slate-400 hover:text-accent px-1.5" onClick={() => startEdit(u)}>Edit</button>
+                  <button className="text-xs text-slate-400 hover:text-rose-400 px-1.5" onClick={() => remove(u.id)}>Delete</button>
+                </td>
+              </tr>
+            ))}
+            {units.length === 0 && (
+              <tr><td colSpan={7} className="py-3 text-slate-500 text-center">Belum ada data Kontrakan.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+function RentalBankSettings() {
+  const { user } = useAuth()
+  const [form, setForm] = useState({ bankName: '', accountNumber: '', accountHolder: '' })
+  const [loaded, setLoaded] = useState(false)
+  const [status, setStatus] = useState('')
+
+  useEffect(() => {
+    getDocs(query(collection(db, 'rentalSettings'), where('uid', '==', user.uid))).then((snap) => {
+      if (!snap.empty) setForm({ ...form, ...snap.docs[0].data() })
+      setLoaded(true)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
+  async function save(e) {
+    e.preventDefault()
+    await setRentalSettingsDoc(user.uid, form)
+    setStatus('Tersimpan.')
+    setTimeout(() => setStatus(''), 2000)
+  }
+
+  if (!loaded) return null
+
+  return (
+    <section className="card p-4 space-y-3">
+      <div>
+        <h2 className="font-display font-medium">Info Rekening (untuk Print reminder)</h2>
+        <p className="text-xs text-slate-500 mt-1">Muncul di teks "Print" pada menu Kontrakan.</p>
+      </div>
+      <form onSubmit={save} className="grid gap-3 sm:grid-cols-3 max-w-2xl">
+        <div>
+          <label className="label mb-1 block">Nama Bank</label>
+          <input className="input" value={form.bankName} onChange={(e) => setForm({ ...form, bankName: e.target.value })} placeholder="BCA" />
+        </div>
+        <div>
+          <label className="label mb-1 block">No Rekening</label>
+          <input className="input" value={form.accountNumber} onChange={(e) => setForm({ ...form, accountNumber: e.target.value })} placeholder="1234567890" />
+        </div>
+        <div>
+          <label className="label mb-1 block">Atas Nama</label>
+          <input className="input" value={form.accountHolder} onChange={(e) => setForm({ ...form, accountHolder: e.target.value })} placeholder="Rony" />
+        </div>
+        <div className="sm:col-span-3 flex items-center gap-3">
+          <button className="btn-primary" type="submit">Simpan</button>
+          {status && <span className="text-xs text-slate-400">{status}</span>}
+        </div>
+      </form>
     </section>
   )
 }

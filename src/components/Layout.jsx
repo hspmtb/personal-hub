@@ -6,6 +6,7 @@ const NAV = [
   { to: '/', label: 'Dashboard', icon: '◧', end: true },
   { to: '/tasks', label: 'Tasks', icon: '◔' },
   { to: '/expenses', label: 'Expenses', icon: '◒' },
+  { to: '/kontrakan', label: 'Kontrakan', icon: '⌂' },
   { to: '/documents', label: 'Documents', icon: '◈' },
   { to: '/users', label: 'Users', icon: '◎', adminOnly: true },
   { to: '/settings', label: 'Settings', icon: '◑' },

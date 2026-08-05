@@ -67,7 +67,17 @@ Karena rules mengharuskan seorang **admin** untuk mengundang user baru, tapi bel
 5. Push ke `main` → tab **Actions** akan otomatis build & deploy. Setelah selesai, situs akan tersedia di `https://<username>.github.io/<nama-repo>/`.
 6. Firebase Console → **Authentication → Settings → Authorized domains** → tambahkan `<username>.github.io` (Firebase Auth menolak domain yang tidak ada di daftar ini).
 
-Setelah ini, site kamu bisa dibuka dari **laptop maupun HP** — sudah responsive (sidebar berubah jadi menu hamburger di layar kecil).
+Setelah ini, site kamu bisa dibuka dari **laptop maupun HP** — sudah responsive (sidebar berubah jadi menu hamburger di layar kecil), dan sudah berupa **PWA (Progressive Web App)** — bisa di-install seperti aplikasi native.
+
+### Install sebagai app (PWA)
+
+**Di HP (Android/Chrome):** buka situsnya → menu titik tiga (⋮) di browser → **"Add to Home screen" / "Install app"** → ikon Personal Hub muncul di home screen, terbuka tanpa address bar seperti app biasa.
+
+**Di HP (iPhone/Safari):** buka situsnya → tombol **Share** (kotak dengan panah ke atas) → **"Add to Home Screen"**.
+
+**Di laptop/desktop (Chrome/Edge):** buka situsnya → akan muncul ikon **install** (biasanya di ujung kanan address bar) → klik **Install** → app terbuka di window sendiri terpisah dari browser.
+
+Setelah di-install, tampilan otomatis menyesuaikan: layout sidebar penuh di layar lebar (desktop), dan menu hamburger di layar sempit (HP) — satu codebase, tampilan menyesuaikan ukuran layar.
 
 ---
 
@@ -83,6 +93,21 @@ Setelah ini, site kamu bisa dibuka dari **laptop maupun HP** — sudah responsiv
 
 ## Catatan lain
 
-- Mata uang laporan expense memakai format USD secara default — ubah `formatCurrency` di `src/pages/Expenses.jsx` dan `src/pages/Dashboard.jsx` ke `'IDR'` bila perlu.
+- Mata uang di seluruh aplikasi memakai format **Rupiah (Rp)** secara default (`src/lib/currency.js`).
 - Routing memakai `HashRouter` (URL berbentuk `/#/tasks`) supaya refresh/deep-link tidak 404 di GitHub Pages (situs statis tanpa server-side rewrite).
 - Menu **Users** hanya menambah/menghapus *hak akses* (invite, role, aktif/nonaktif) dan profil; pembuatan akun login tetap dilakukan sendiri oleh user lewat halaman **Create account** setelah diundang (batasan Firebase: pembuatan akun Auth pihak lain dari sisi browser tidak aman tanpa server/Cloud Functions).
+
+## Menu Kontrakan
+
+- Data master (No Kontrakan, Nama Penyewa, Uang Sewa, Iuran RT/RW, Uang Internet, Kubik Awal) dikelola di **Settings → Master Kontrakan**.
+- Info rekening untuk teks reminder ada di **Settings → Info Rekening**.
+- Di halaman **Kontrakan**, pilih bulan & tahun (default bulan berjalan) → isi data topup listrik → isi Kubik air tiap kontrakan → sistem otomatis menghitung Kubik Terpakai dan membagi Biaya Topup secara proporsional ke tiap kontrakan berdasarkan pemakaian air. "Sisa Kwh Last Month" otomatis terisi dari data bulan sebelumnya jika sudah pernah diisi.
+- Tombol **Print** di tiap baris membuka teks reminder siap-copy/kirim ke WhatsApp.
+
+### Update Firestore Rules & Index setelah upgrade ini
+
+Karena ada collection baru (`rentalUnits`, `rentalPeriods`, `rentalReadings`, `rentalSettings`), **wajib publish ulang rules & index** setelah update file-file ini, atau fitur Kontrakan akan gagal dengan error "Missing or insufficient permissions":
+
+- Lewat CLI: `firebase deploy --only firestore:rules,firestore:indexes`
+- Atau manual lewat Firebase Console: **Firestore Database → tab Rules** → paste isi `firestore.rules` yang baru → **Publish**. Untuk index, biasanya cukup buka menu **Kontrakan** sekali — Firestore/console akan menampilkan link "Create Index" otomatis di error console (F12) kalau index belum ada, tinggal diklik.
+

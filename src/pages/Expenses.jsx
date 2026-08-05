@@ -6,6 +6,7 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 import { format, parseISO } from 'date-fns'
 import { db } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext.jsx'
+import { formatIDR } from '../lib/currency'
 
 const emptyForm = { categoryId: '', amount: '', date: format(new Date(), 'yyyy-MM-dd'), note: '' }
 
@@ -99,7 +100,7 @@ export default function Expenses() {
         </div>
         <div>
           <label className="label mb-1 block">Amount</label>
-          <input className="input" type="number" step="0.01" min="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0.00" />
+          <input className="input" type="number" step="1000" min="1" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0" />
         </div>
         <div>
           <label className="label mb-1 block">Date</label>
@@ -120,25 +121,39 @@ export default function Expenses() {
         <div className="card p-4">
           <div className="flex items-baseline justify-between mb-2">
             <h2 className="font-display font-medium">Breakdown — {format(parseISO(month + '-01'), 'MMMM yyyy')}</h2>
-            <span className="font-mono text-sm text-slate-300">Total: {formatCurrency(totals.total)}</span>
+            <span className="font-mono text-sm text-slate-300">Total: {formatIDR(totals.total)}</span>
           </div>
           {pieData.length === 0 ? (
             <p className="text-slate-500 text-sm py-8 text-center">No expenses recorded this month.</p>
           ) : (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={85} paddingAngle={2}>
-                    {pieData.map((entry, i) => <Cell key={i} fill={entry.color} stroke="none" />)}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{ background: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
-                    formatter={(value, name, props) => [`${formatCurrency(value)} (${props.payload.pct.toFixed(1)}%)`, name]}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            <>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={85} paddingAngle={2}>
+                      {pieData.map((entry, i) => <Cell key={i} fill={entry.color} stroke="none" />)}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ background: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
+                      formatter={(value, name, props) => [`${formatIDR(value)} (${props.payload.pct.toFixed(1)}%)`, name]}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Explicit per-category breakdown, e.g. "Coffee — Rp500.000 (5%)" */}
+              <ul className="mt-3 space-y-1.5 text-sm border-t border-white/10 pt-3">
+                {[...pieData].sort((a, b) => b.value - a.value).map((c) => (
+                  <li key={c.name} className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color }} />
+                    <span className="flex-1 truncate">{c.name}</span>
+                    <span className="font-mono text-slate-300">{formatIDR(c.value)}</span>
+                    <span className="text-slate-500 w-14 text-right shrink-0">{c.pct.toFixed(1)}%</span>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
 
@@ -154,7 +169,7 @@ export default function Expenses() {
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ background: categoryById[e.categoryId]?.color || '#64748b' }} />
                   <span className="text-slate-400 font-mono text-xs w-20 shrink-0">{format(parseISO(e.date), 'MMM d')}</span>
                   <span className="flex-1 min-w-0 truncate">{categoryById[e.categoryId]?.name || 'Uncategorized'}{e.note ? ` — ${e.note}` : ''}</span>
-                  <span className="font-mono shrink-0">{formatCurrency(e.amount)}</span>
+                  <span className="font-mono shrink-0">{formatIDR(e.amount)}</span>
                   <button className="text-xs text-slate-400 hover:text-accent px-1" onClick={() => startEdit(e)}>Edit</button>
                   <button className="text-xs text-slate-400 hover:text-rose-400 px-1" onClick={() => remove(e.id)}>Delete</button>
                 </li>
@@ -165,8 +180,4 @@ export default function Expenses() {
       </div>
     </div>
   )
-}
-
-function formatCurrency(n) {
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n || 0)
 }

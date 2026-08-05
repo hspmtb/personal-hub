@@ -58,6 +58,28 @@ match /databases/{database}/documents {
     allow read, write: if isOwner(uid);
   }
 
+  match /rentalUnits/{id} {
+    allow read, delete: if isOwner(resource.data.uid);
+    allow create: if isOwner(request.resource.data.uid);
+    allow update: if isOwner(resource.data.uid) && isOwner(request.resource.data.uid);
+  }
+
+  match /rentalPeriods/{id} {
+    allow read, delete: if isOwner(resource.data.uid);
+    allow create: if isOwner(request.resource.data.uid);
+    allow update: if isOwner(resource.data.uid) && isOwner(request.resource.data.uid);
+  }
+
+  match /rentalReadings/{id} {
+    allow read, delete: if isOwner(resource.data.uid);
+    allow create: if isOwner(request.resource.data.uid);
+    allow update: if isOwner(resource.data.uid) && isOwner(request.resource.data.uid);
+  }
+
+  match /rentalSettings/{uid} {
+    allow read, write: if isOwner(uid);
+  }
+
   match /users/{uid} {
     allow read: if isSignedIn();
     allow create: if isOwner(uid); // a brand-new user creates their own profile doc on sign-up
