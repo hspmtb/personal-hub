@@ -100,7 +100,7 @@ export default function Expenses() {
         </div>
         <div>
           <label className="label mb-1 block">Amount</label>
-          <input className="input" type="number" step="1000" min="1" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0" />
+          <input className="input" type="number" step="1" min="0" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0" />
         </div>
         <div>
           <label className="label mb-1 block">Date</label>

@@ -221,7 +221,7 @@ export default function Kontrakan() {
           </div>
           <div>
             <label className="label mb-1 block">Biaya Topup</label>
-            <input className="input" type="number" step="1000" value={periodForm.biayaTopup} onChange={(e) => setPeriodForm({ ...periodForm, biayaTopup: e.target.value })} placeholder="503000" />
+            <input className="input" type="number" step="1" value={periodForm.biayaTopup} onChange={(e) => setPeriodForm({ ...periodForm, biayaTopup: e.target.value })} placeholder="503000" />
           </div>
           <div>
             <label className="label mb-1 block">Sisa Kwh Last Month</label>
@@ -297,7 +297,7 @@ export default function Kontrakan() {
                   <td className="py-1.5 pr-3">
                     <input
                       className="input !py-1 w-28"
-                      type="number" step="1000"
+                      type="number" step="1"
                       defaultValue={readings[r.unit.id]?.adjustBiayaAir ?? Math.round(r.biayaAir)}
                       onBlur={(e) => saveReading(r.unit.id, { adjustBiayaAir: e.target.value === '' ? null : Number(e.target.value) })}
                     />

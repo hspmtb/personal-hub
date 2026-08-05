@@ -154,15 +154,15 @@ function RentalUnitSettings() {
         </div>
         <div>
           <label className="label mb-1 block">Uang Sewa</label>
-          <input className="input" type="number" min="0" step="1000" value={form.uangSewa} onChange={(e) => setForm({ ...form, uangSewa: e.target.value })} placeholder="2000000" />
+          <input className="input" type="number" min="0" step="1" value={form.uangSewa} onChange={(e) => setForm({ ...form, uangSewa: e.target.value })} placeholder="2000000" />
         </div>
         <div>
           <label className="label mb-1 block">Iuran RT/RW</label>
-          <input className="input" type="number" min="0" step="1000" value={form.iuranRT} onChange={(e) => setForm({ ...form, iuranRT: e.target.value })} placeholder="50000" />
+          <input className="input" type="number" min="0" step="1" value={form.iuranRT} onChange={(e) => setForm({ ...form, iuranRT: e.target.value })} placeholder="50000" />
         </div>
         <div>
           <label className="label mb-1 block">Uang Internet</label>
-          <input className="input" type="number" min="0" step="1000" value={form.uangInternet} onChange={(e) => setForm({ ...form, uangInternet: e.target.value })} placeholder="75000" />
+          <input className="input" type="number" min="0" step="1" value={form.uangInternet} onChange={(e) => setForm({ ...form, uangInternet: e.target.value })} placeholder="75000" />
         </div>
         <div>
           <label className="label mb-1 block">Kubik Awal</label>
