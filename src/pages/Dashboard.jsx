@@ -16,8 +16,12 @@ export default function Dashboard() {
   const [docCount, setDocCount] = useState(0)
 
   useEffect(() => {
-    const u1 = onSnapshot(query(collection(db, 'tasks'), where('uid', '==', user.uid), where('date', '==', today)), (snap) =>
-      setTodayTasks(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    const u1 = onSnapshot(query(collection(db, 'tasks'), where('uid', '==', user.uid)), (snap) =>
+      setTodayTasks(
+        snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((t) => (t.startDate || t.date) <= today && (t.endDate || t.date) >= today),
+      ),
     )
     const u2 = onSnapshot(query(collection(db, 'expenses'), where('uid', '==', user.uid)), (snap) =>
       setMonthExpenses(snap.docs.map((d) => d.data()).filter((e) => e.date.startsWith(month))),

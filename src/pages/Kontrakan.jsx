@@ -68,8 +68,8 @@ export default function Kontrakan() {
   useEffect(() => {
     const q = query(collection(db, 'rentalUnits'), where('uid', '==', user.uid), orderBy('createdAt'))
     const unsub = onSnapshot(q, (snap) => setUnits(snap.docs.map((d) => ({ id: d.id, ...d.data() }))))
-    getDocs(query(collection(db, 'rentalSettings'), where('uid', '==', user.uid))).then((snap) => {
-      if (!snap.empty) setBankInfo(snap.docs[0].data())
+    getDoc(doc(db, 'rentalSettings', user.uid)).then((snap) => {
+      if (snap.exists()) setBankInfo(snap.data())
     })
     return unsub
     // eslint-disable-next-line react-hooks/exhaustive-deps

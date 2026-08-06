@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, orderBy, serverTimestamp, setDoc,
+  collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, getDocs, orderBy, serverTimestamp, setDoc,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -230,9 +230,9 @@ function RentalBankSettings() {
   const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
-    getDocs(query(collection(db, 'rentalSettings'), where('uid', '==', user.uid)))
+    getDoc(doc(db, 'rentalSettings', user.uid))
       .then((snap) => {
-        if (!snap.empty) setForm((f) => ({ ...f, ...snap.docs[0].data() }))
+        if (snap.exists()) setForm((f) => ({ ...f, ...snap.data() }))
       })
       .catch((err) => setLoadError(err.message))
     // eslint-disable-next-line react-hooks/exhaustive-deps

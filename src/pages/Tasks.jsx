@@ -1,14 +1,26 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy,
+  collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
 } from 'firebase/firestore'
 import {
-  format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addWeeks, addMonths, parseISO,
+  format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, addWeeks, addMonths, parseISO,
 } from 'date-fns'
 import { db } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext.jsx'
 
-const emptyForm = { title: '', date: format(new Date(), 'yyyy-MM-dd'), start: '09:00', end: '10:00', notes: '' }
+const todayStr = () => format(new Date(), 'yyyy-MM-dd')
+const emptyForm = { title: '', startDate: todayStr(), endDate: todayStr(), start: '09:00', end: '10:00', notes: '' }
+
+// Older tasks were saved with a single `date` field (before multi-day
+// ranges existed). Treat those as a one-day range so nothing breaks.
+function normalizeTask(id, data) {
+  return {
+    id,
+    ...data,
+    startDate: data.startDate || data.date,
+    endDate: data.endDate || data.date,
+  }
+}
 
 export default function Tasks() {
   const { user } = useAuth()
@@ -19,8 +31,10 @@ export default function Tasks() {
   const [editingId, setEditingId] = useState(null)
 
   useEffect(() => {
-    const q = query(collection(db, 'tasks'), where('uid', '==', user.uid), orderBy('date'), orderBy('start'))
-    return onSnapshot(q, (snap) => setTasks(snap.docs.map((d) => ({ id: d.id, ...d.data() }))))
+    // Fetching by uid only (no orderBy) avoids needing a composite index,
+    // and lets a task's day-range be filtered client-side below.
+    const q = query(collection(db, 'tasks'), where('uid', '==', user.uid))
+    return onSnapshot(q, (snap) => setTasks(snap.docs.map((d) => normalizeTask(d.id, d.data()))))
   }, [user])
 
   const range = useMemo(() => {
@@ -31,7 +45,14 @@ export default function Tasks() {
 
   const days = useMemo(() => eachDayOfInterval(range), [range])
 
-  const tasksByDay = (day) => tasks.filter((t) => isSameDay(parseISO(t.date), day)).sort((a, b) => a.start.localeCompare(b.start))
+  // A task "appears" on every day within [startDate, endDate] (inclusive) —
+  // this is what lets a 10-day task be entered once instead of 10 times.
+  function tasksByDay(day) {
+    const dayStr = format(day, 'yyyy-MM-dd')
+    return tasks
+      .filter((t) => t.startDate <= dayStr && t.endDate >= dayStr)
+      .sort((a, b) => a.start.localeCompare(b.start))
+  }
 
   function shift(dir) {
     if (view === 'day') setAnchor((a) => addDaysSafe(a, dir))
@@ -42,10 +63,13 @@ export default function Tasks() {
   async function handleSubmit(e) {
     e.preventDefault()
     if (!form.title.trim()) return
+    const startDate = form.startDate
+    const endDate = form.endDate < form.startDate ? form.startDate : form.endDate // guard against an accidental inverted range
     const payload = {
       uid: user.uid,
       title: form.title.trim(),
-      date: form.date,
+      startDate,
+      endDate,
       start: form.start,
       end: form.end,
       notes: form.notes.trim(),
@@ -61,7 +85,7 @@ export default function Tasks() {
 
   function startEdit(t) {
     setEditingId(t.id)
-    setForm({ title: t.title, date: t.date, start: t.start, end: t.end, notes: t.notes || '' })
+    setForm({ title: t.title, startDate: t.startDate, endDate: t.endDate, start: t.start, end: t.end, notes: t.notes || '' })
   }
 
   async function toggleDone(t) {
@@ -93,30 +117,40 @@ export default function Tasks() {
       </header>
 
       {/* Add / edit form */}
-      <form onSubmit={handleSubmit} className="card p-4 grid gap-3 sm:grid-cols-6">
-        <div className="sm:col-span-2">
+      <form onSubmit={handleSubmit} className="card p-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="sm:col-span-3 lg:col-span-2">
           <label className="label mb-1 block">Title</label>
           <input className="input" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Write report" />
         </div>
         <div>
-          <label className="label mb-1 block">Date</label>
-          <input className="input" type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+          <label className="label mb-1 block">From Date</label>
+          <input
+            className="input" type="date" required value={form.startDate}
+            onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value, endDate: f.endDate < e.target.value ? e.target.value : f.endDate }))}
+          />
         </div>
         <div>
-          <label className="label mb-1 block">From</label>
+          <label className="label mb-1 block">To Date</label>
+          <input className="input" type="date" required min={form.startDate} value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+        </div>
+        <div>
+          <label className="label mb-1 block">Start Time</label>
           <input className="input" type="time" required value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} />
         </div>
         <div>
-          <label className="label mb-1 block">To</label>
+          <label className="label mb-1 block">End Time</label>
           <input className="input" type="time" required value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} />
         </div>
+        <p className="sm:col-span-3 lg:col-span-6 text-xs text-slate-500 -mt-1">
+          Task multi-hari: isi "From Date" dan "To Date" berbeda sekali saja — otomatis muncul di setiap hari dalam rentang itu, tidak perlu input ulang tiap hari.
+        </p>
         <div className="flex items-end gap-2">
           <button className="btn-primary flex-1" type="submit">{editingId ? 'Save' : 'Add task'}</button>
           {editingId && (
             <button type="button" className="btn-ghost" onClick={() => { setEditingId(null); setForm(emptyForm) }}>Cancel</button>
           )}
         </div>
-        <div className="sm:col-span-6">
+        <div className="sm:col-span-3 lg:col-span-6">
           <label className="label mb-1 block">Notes (optional)</label>
           <input className="input" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Details…" />
         </div>
@@ -124,13 +158,13 @@ export default function Tasks() {
 
       {/* Views */}
       {view === 'day' ? (
-        <DayList day={anchor} items={tasksByDay(anchor)} onEdit={startEdit} onToggle={toggleDone} onDelete={remove} />
+        <DayList items={tasksByDay(anchor)} onEdit={startEdit} onToggle={toggleDone} onDelete={remove} />
       ) : (
         <div className={`grid gap-3 ${view === 'week' ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3 lg:grid-cols-5'}`}>
           {days.map((day) => (
             <div key={day.toISOString()} className="card p-3">
               <div className="label mb-2">{format(day, 'EEE, MMM d')}</div>
-              <DayList compact day={day} items={tasksByDay(day)} onEdit={startEdit} onToggle={toggleDone} onDelete={remove} />
+              <DayList compact items={tasksByDay(day)} onEdit={startEdit} onToggle={toggleDone} onDelete={remove} />
             </div>
           ))}
         </div>
@@ -143,24 +177,32 @@ function DayList({ items, onEdit, onToggle, onDelete, compact }) {
   if (items.length === 0) return <p className="text-slate-500 text-sm">No tasks.</p>
   return (
     <ul className="space-y-2">
-      {items.map((t) => (
-        <li key={t.id} className={`flex items-start gap-2 ${compact ? '' : 'card p-3'}`}>
-          <input type="checkbox" checked={!!t.done} onChange={() => onToggle(t)} className="mt-1 accent-teal-400" />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`text-sm font-medium ${t.done ? 'line-through text-slate-500' : ''}`}>{t.title}</span>
-              <span className="text-xs text-slate-400 font-mono">{t.start}–{t.end}</span>
+      {items.map((t) => {
+        const multiDay = t.startDate !== t.endDate
+        return (
+          <li key={t.id} className={`flex items-start gap-2 ${compact ? '' : 'card p-3'}`}>
+            <input type="checkbox" checked={!!t.done} onChange={() => onToggle(t)} className="mt-1 accent-teal-400" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-sm font-medium ${t.done ? 'line-through text-slate-500' : ''}`}>{t.title}</span>
+                <span className="text-xs text-slate-400 font-mono">{t.start}–{t.end}</span>
+                {multiDay && (
+                  <span className="text-[10px] uppercase tracking-wide text-accent bg-accent/10 rounded px-1.5 py-0.5">
+                    {format(parseISO(t.startDate), 'MMM d')}–{format(parseISO(t.endDate), 'MMM d')}
+                  </span>
+                )}
+              </div>
+              {t.notes && <p className="text-xs text-slate-500 mt-0.5 truncate">{t.notes}</p>}
             </div>
-            {t.notes && <p className="text-xs text-slate-500 mt-0.5 truncate">{t.notes}</p>}
-          </div>
-          {!compact && (
-            <div className="flex gap-1 shrink-0">
-              <button className="text-xs text-slate-400 hover:text-accent px-1.5" onClick={() => onEdit(t)}>Edit</button>
-              <button className="text-xs text-slate-400 hover:text-rose-400 px-1.5" onClick={() => onDelete(t.id)}>Delete</button>
-            </div>
-          )}
-        </li>
-      ))}
+            {!compact && (
+              <div className="flex gap-1 shrink-0">
+                <button className="text-xs text-slate-400 hover:text-accent px-1.5" onClick={() => onEdit(t)}>Edit</button>
+                <button className="text-xs text-slate-400 hover:text-rose-400 px-1.5" onClick={() => onDelete(t.id)}>Delete</button>
+              </div>
+            )}
+          </li>
+        )
+      })}
     </ul>
   )
 }
