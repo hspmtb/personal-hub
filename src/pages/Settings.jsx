@@ -226,25 +226,29 @@ function RentalUnitSettings() {
 function RentalBankSettings() {
   const { user } = useAuth()
   const [form, setForm] = useState({ bankName: '', accountNumber: '', accountHolder: '' })
-  const [loaded, setLoaded] = useState(false)
   const [status, setStatus] = useState('')
+  const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
-    getDocs(query(collection(db, 'rentalSettings'), where('uid', '==', user.uid))).then((snap) => {
-      if (!snap.empty) setForm({ ...form, ...snap.docs[0].data() })
-      setLoaded(true)
-    })
+    getDocs(query(collection(db, 'rentalSettings'), where('uid', '==', user.uid)))
+      .then((snap) => {
+        if (!snap.empty) setForm((f) => ({ ...f, ...snap.docs[0].data() }))
+      })
+      .catch((err) => setLoadError(err.message))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
   async function save(e) {
     e.preventDefault()
-    await setRentalSettingsDoc(user.uid, form)
-    setStatus('Tersimpan.')
-    setTimeout(() => setStatus(''), 2000)
+    setStatus('')
+    try {
+      await setRentalSettingsDoc(user.uid, form)
+      setStatus('Tersimpan.')
+      setTimeout(() => setStatus(''), 2000)
+    } catch (err) {
+      setStatus(err.message)
+    }
   }
-
-  if (!loaded) return null
 
   return (
     <section className="card p-4 space-y-3">
@@ -252,6 +256,7 @@ function RentalBankSettings() {
         <h2 className="font-display font-medium">Info Rekening (untuk Print reminder)</h2>
         <p className="text-xs text-slate-500 mt-1">Muncul di teks "Print" pada menu Kontrakan.</p>
       </div>
+      {loadError && <p className="text-xs text-rose-400">Gagal memuat data tersimpan: {loadError}</p>}
       <form onSubmit={save} className="grid gap-3 sm:grid-cols-3 max-w-2xl">
         <div>
           <label className="label mb-1 block">Nama Bank</label>

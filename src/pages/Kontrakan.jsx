@@ -104,8 +104,12 @@ export default function Kontrakan() {
         biayaCurrMonth: pData ? String(pData.biayaCurrMonth ?? '') : '',
       })
       setSisaLastMonthLocked(prevHasData && !pData)
-      setPerKwhTouched(!!pData) // once saved, treat as "already set" so it won't silently auto-recompute over a saved value
-      setBiayaCurrMonthTouched(!!pData)
+      // Only treat as "manually set" if that specific field was actually
+      // saved before — a period doc saved before this field existed
+      // (pData exists but biayaPerKwh/biayaCurrMonth is missing) should
+      // still auto-calculate its default.
+      setPerKwhTouched(!!(pData && pData.biayaPerKwh !== undefined && pData.biayaPerKwh !== null))
+      setBiayaCurrMonthTouched(!!(pData && pData.biayaCurrMonth !== undefined && pData.biayaCurrMonth !== null))
 
       const readingsMap = {}
       readingsSnap.forEach((d) => { readingsMap[d.data().unitId] = d.data() })
