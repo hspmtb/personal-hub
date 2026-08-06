@@ -65,7 +65,8 @@ match /databases/{database}/documents {
   }
 
   match /rentalPeriods/{id} {
-    allow read, delete: if isOwner(resource.data.uid);
+    allow read: if resource == null || isOwner(resource.data.uid);
+    allow delete: if isOwner(resource.data.uid);
     allow create: if isOwner(request.resource.data.uid);
     allow update: if isOwner(resource.data.uid) && isOwner(request.resource.data.uid);
   }

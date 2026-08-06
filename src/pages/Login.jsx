@@ -35,7 +35,7 @@ export default function Login() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="text-accent text-3xl mb-2">◆</div>
-          <h1 className="font-display text-xl font-semibold">Personal Hub</h1>
+          <h1 className="font-display text-xl font-semibold">Personal Apps Rony Delano</h1>
           <p className="text-slate-400 text-sm mt-1">Tasks, expenses, and documents — private and encrypted.</p>
         </div>
 

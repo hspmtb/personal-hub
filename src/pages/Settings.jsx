@@ -84,7 +84,7 @@ function ExpenseCategorySettings() {
   )
 }
 
-const emptyRentalForm = { noKontrakan: '', namaPenyewa: '', uangSewa: '', iuranRT: '', uangInternet: '', kubikAwal: '' }
+const emptyRentalForm = { noKontrakan: '', namaPenyewa: '', gender: 'M', uangSewa: '', iuranRT: '', uangInternet: '', kubikAwal: '' }
 
 function RentalUnitSettings() {
   const { user } = useAuth()
@@ -104,6 +104,7 @@ function RentalUnitSettings() {
       uid: user.uid,
       noKontrakan: form.noKontrakan.trim(),
       namaPenyewa: form.namaPenyewa.trim(),
+      gender: form.gender === 'F' ? 'F' : 'M',
       uangSewa: Number(form.uangSewa) || 0,
       iuranRT: Number(form.iuranRT) || 0,
       uangInternet: Number(form.uangInternet) || 0,
@@ -123,6 +124,7 @@ function RentalUnitSettings() {
     setForm({
       noKontrakan: u.noKontrakan,
       namaPenyewa: u.namaPenyewa,
+      gender: u.gender || 'M',
       uangSewa: String(u.uangSewa),
       iuranRT: String(u.iuranRT),
       uangInternet: String(u.uangInternet),
@@ -143,7 +145,7 @@ function RentalUnitSettings() {
         <p className="text-xs text-slate-500 mt-1">Data unit sewa yang dipakai di menu Kontrakan setiap bulan.</p>
       </div>
 
-      <form onSubmit={submit} className="grid gap-3 sm:grid-cols-3">
+      <form onSubmit={submit} className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <div>
           <label className="label mb-1 block">No Kontrakan</label>
           <input className="input" required value={form.noKontrakan} onChange={(e) => setForm({ ...form, noKontrakan: e.target.value })} placeholder="Kontrakan 1" />
@@ -151,6 +153,13 @@ function RentalUnitSettings() {
         <div>
           <label className="label mb-1 block">Nama Penyewa</label>
           <input className="input" required value={form.namaPenyewa} onChange={(e) => setForm({ ...form, namaPenyewa: e.target.value })} placeholder="Fikri" />
+        </div>
+        <div>
+          <label className="label mb-1 block">Gender</label>
+          <select className="input" value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
+            <option value="M">Male</option>
+            <option value="F">Female</option>
+          </select>
         </div>
         <div>
           <label className="label mb-1 block">Uang Sewa</label>
@@ -168,7 +177,7 @@ function RentalUnitSettings() {
           <label className="label mb-1 block">Kubik Awal</label>
           <input className="input" type="number" min="0" step="1" value={form.kubikAwal} onChange={(e) => setForm({ ...form, kubikAwal: e.target.value })} placeholder="35" />
         </div>
-        <div className="sm:col-span-3 flex gap-2">
+        <div className="sm:col-span-3 lg:col-span-4 flex gap-2">
           <button className="btn-primary" type="submit">{editingId ? 'Save' : 'Add Kontrakan'}</button>
           {editingId && <button type="button" className="btn-ghost" onClick={() => { setEditingId(null); setForm(emptyRentalForm) }}>Cancel</button>}
         </div>
@@ -180,6 +189,7 @@ function RentalUnitSettings() {
             <tr className="text-left text-slate-500 text-xs uppercase">
               <th className="py-1.5 pr-3">No Kontrakan</th>
               <th className="py-1.5 pr-3">Penyewa</th>
+              <th className="py-1.5 pr-3">Gender</th>
               <th className="py-1.5 pr-3">Uang Sewa</th>
               <th className="py-1.5 pr-3">Iuran RT/RW</th>
               <th className="py-1.5 pr-3">Internet</th>
@@ -192,6 +202,7 @@ function RentalUnitSettings() {
               <tr key={u.id} className="border-t border-white/5">
                 <td className="py-1.5 pr-3">{u.noKontrakan}</td>
                 <td className="py-1.5 pr-3">{u.namaPenyewa}</td>
+                <td className="py-1.5 pr-3">{u.gender === 'F' ? 'Female' : 'Male'}</td>
                 <td className="py-1.5 pr-3 font-mono">{u.uangSewa.toLocaleString('id-ID')}</td>
                 <td className="py-1.5 pr-3 font-mono">{u.iuranRT.toLocaleString('id-ID')}</td>
                 <td className="py-1.5 pr-3 font-mono">{u.uangInternet.toLocaleString('id-ID')}</td>
@@ -203,7 +214,7 @@ function RentalUnitSettings() {
               </tr>
             ))}
             {units.length === 0 && (
-              <tr><td colSpan={7} className="py-3 text-slate-500 text-center">Belum ada data Kontrakan.</td></tr>
+              <tr><td colSpan={8} className="py-3 text-slate-500 text-center">Belum ada data Kontrakan.</td></tr>
             )}
           </tbody>
         </table>

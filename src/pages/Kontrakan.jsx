@@ -25,7 +25,23 @@ function yearOptions(currentYear) {
   return arr
 }
 
-const emptyPeriodForm = { topupKwh: '', biayaTopup: '', sisaKwhLastMonth: '', sisaKwhCurrMonth: '', biayaPerKwh: '' }
+// Pagi 06:00–11:00, Siang 11:01–15:00, Sore 15:01–19:00, Malam 19:01–24:00
+// (and 00:00–05:59, not specified, falls back to "Malam" as the closest bucket).
+function getTimeGreeting(date = new Date()) {
+  const mins = date.getHours() * 60 + date.getMinutes()
+  if (mins >= 360 && mins <= 660) return 'Pagi'
+  if (mins >= 661 && mins <= 900) return 'Siang'
+  if (mins >= 901 && mins <= 1140) return 'Sore'
+  return 'Malam'
+}
+
+function genderTitle(gender) {
+  return gender === 'F' ? 'Mbak' : 'Mas'
+}
+
+const emptyPeriodForm = {
+  topupKwh: '', biayaTopup: '', sisaKwhLastMonth: '', sisaKwhCurrMonth: '', biayaPerKwh: '', biayaCurrMonth: '',
+}
 
 export default function Kontrakan() {
   const { user } = useAuth()
@@ -41,6 +57,7 @@ export default function Kontrakan() {
   const [periodForm, setPeriodForm] = useState(emptyPeriodForm)
   const [sisaLastMonthLocked, setSisaLastMonthLocked] = useState(false)
   const [perKwhTouched, setPerKwhTouched] = useState(false)
+  const [biayaCurrMonthTouched, setBiayaCurrMonthTouched] = useState(false)
   const [readings, setReadings] = useState({}) // unitId -> { kubikCurrMonth, adjustBiayaAir }
   const [prevReadings, setPrevReadings] = useState({}) // unitId -> { kubikCurrMonth }
   const [loading, setLoading] = useState(true)
@@ -63,6 +80,7 @@ export default function Kontrakan() {
     let cancelled = false
     setLoading(true)
     setPerKwhTouched(false)
+    setBiayaCurrMonthTouched(false)
 
     async function load() {
       const [periodSnap, prevPeriodSnap, readingsSnap, prevReadingsSnap] = await Promise.all([
@@ -83,9 +101,11 @@ export default function Kontrakan() {
         sisaKwhLastMonth: pData ? String(pData.sisaKwhLastMonth ?? '') : sisaLastMonthAuto,
         sisaKwhCurrMonth: pData ? String(pData.sisaKwhCurrMonth ?? '') : '',
         biayaPerKwh: pData ? String(pData.biayaPerKwh ?? '') : '',
+        biayaCurrMonth: pData ? String(pData.biayaCurrMonth ?? '') : '',
       })
       setSisaLastMonthLocked(prevHasData && !pData)
       setPerKwhTouched(!!pData) // once saved, treat as "already set" so it won't silently auto-recompute over a saved value
+      setBiayaCurrMonthTouched(!!pData)
 
       const readingsMap = {}
       readingsSnap.forEach((d) => { readingsMap[d.data().unitId] = d.data() })
@@ -119,7 +139,16 @@ export default function Kontrakan() {
     return last + topup - curr
   }, [periodForm])
 
-  const biayaTopupNum = parseFloat(periodForm.biayaTopup) || 0
+  // Auto-compute default "Biaya Curr Month" = Pemakaian Kwh Curr Month * Biaya Per Kwh,
+  // unless the user manually edited it.
+  useEffect(() => {
+    if (biayaCurrMonthTouched) return
+    const perKwh = parseFloat(periodForm.biayaPerKwh) || 0
+    setPeriodForm((f) => ({ ...f, biayaCurrMonth: String(Math.round(pemakaianKwhCurrMonth * perKwh)) }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pemakaianKwhCurrMonth, periodForm.biayaPerKwh])
+
+  const biayaCurrMonthNum = parseFloat(periodForm.biayaCurrMonth) || 0
 
   // Per-unit water usage + cost distribution
   const rows = useMemo(() => {
@@ -133,12 +162,12 @@ export default function Kontrakan() {
     })
     const totalTerpakai = withTerpakai.reduce((s, r) => s + r.terpakai, 0)
     return withTerpakai.map((r) => {
-      const biayaAir = totalTerpakai > 0 ? (r.terpakai / totalTerpakai) * biayaTopupNum : 0
+      const biayaAir = totalTerpakai > 0 ? (r.terpakai / totalTerpakai) * biayaCurrMonthNum : 0
       const adjustRaw = readings[r.unit.id]?.adjustBiayaAir
       const adjust = adjustRaw !== undefined && adjustRaw !== null && adjustRaw !== '' ? Number(adjustRaw) : Math.round(biayaAir)
       return { ...r, biayaAir, adjust }
     })
-  }, [units, readings, prevReadings, biayaTopupNum])
+  }, [units, readings, prevReadings, biayaCurrMonthNum])
 
   const totalBiayaAir = rows.reduce((s, r) => s + r.biayaAir, 0)
   const totalAdjustAir = rows.reduce((s, r) => s + r.adjust, 0)
@@ -153,6 +182,7 @@ export default function Kontrakan() {
       sisaKwhLastMonth: parseFloat(periodForm.sisaKwhLastMonth) || 0,
       sisaKwhCurrMonth: parseFloat(periodForm.sisaKwhCurrMonth) || 0,
       biayaPerKwh: parseFloat(periodForm.biayaPerKwh) || 0,
+      biayaCurrMonth: parseFloat(periodForm.biayaCurrMonth) || 0,
     }, { merge: true })
     setSaveStatus('Tersimpan.')
     setTimeout(() => setSaveStatus(''), 2000)
@@ -173,7 +203,7 @@ export default function Kontrakan() {
   function openPrint(row) {
     const total = row.unit.uangSewa + row.unit.iuranRT + row.adjust + row.unit.uangInternet
     const text = [
-      `Siang Mas ${row.unit.namaPenyewa},`,
+      `${getTimeGreeting()} ${genderTitle(row.unit.gender)} ${row.unit.namaPenyewa},`,
       '',
       'Reminder uang kontrakan ya, rinciannya :',
       `Uang Sewa : Rp${formatNumberID(row.unit.uangSewa)}`,
@@ -214,17 +244,17 @@ export default function Kontrakan() {
       {/* Electricity / Kwh tracking */}
       <form onSubmit={savePeriod} className="card p-4 space-y-3">
         <h2 className="font-display font-medium">Listrik (Topup Kwh) — {MONTHS[monthIdx]} {year}</h2>
-        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid gap-x-3 gap-y-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
           <div>
-            <label className="label mb-1 block">Topup Kwh</label>
+            <label className="label mb-1 flex items-end min-h-[2rem]">Topup Kwh</label>
             <input className="input" type="number" step="0.01" value={periodForm.topupKwh} onChange={(e) => setPeriodForm({ ...periodForm, topupKwh: e.target.value })} placeholder="280.2" />
           </div>
           <div>
-            <label className="label mb-1 block">Biaya Topup</label>
+            <label className="label mb-1 flex items-end min-h-[2rem]">Biaya Topup</label>
             <input className="input" type="number" step="1" value={periodForm.biayaTopup} onChange={(e) => setPeriodForm({ ...periodForm, biayaTopup: e.target.value })} placeholder="503000" />
           </div>
           <div>
-            <label className="label mb-1 block">Sisa Kwh Last Month</label>
+            <label className="label mb-1 flex items-end min-h-[2rem]">Sisa Kwh Last Month</label>
             <input
               className="input"
               type="number" step="0.01"
@@ -236,20 +266,29 @@ export default function Kontrakan() {
             {sisaLastMonthLocked && <p className="text-[11px] text-slate-500 mt-0.5">Otomatis dari bulan lalu</p>}
           </div>
           <div>
-            <label className="label mb-1 block">Sisa Kwh Curr Month</label>
+            <label className="label mb-1 flex items-end min-h-[2rem]">Sisa Kwh Curr Month</label>
             <input className="input" type="number" step="0.01" value={periodForm.sisaKwhCurrMonth} onChange={(e) => setPeriodForm({ ...periodForm, sisaKwhCurrMonth: e.target.value })} placeholder="170.38" />
           </div>
           <div>
-            <label className="label mb-1 block">Pemakaian Kwh Curr Month</label>
+            <label className="label mb-1 flex items-end min-h-[2rem]">Pemakaian Kwh Curr Month</label>
             <input className="input font-mono" value={pemakaianKwhCurrMonth.toFixed(2)} readOnly />
           </div>
           <div>
-            <label className="label mb-1 block">Biaya Per Kwh</label>
+            <label className="label mb-1 flex items-end min-h-[2rem]">Biaya Per Kwh</label>
             <input
               className="input"
               type="number" step="1"
               value={periodForm.biayaPerKwh}
               onChange={(e) => { setPerKwhTouched(true); setPeriodForm({ ...periodForm, biayaPerKwh: e.target.value }) }}
+            />
+          </div>
+          <div>
+            <label className="label mb-1 flex items-end min-h-[2rem]">Biaya Curr Month</label>
+            <input
+              className="input"
+              type="number" step="1"
+              value={periodForm.biayaCurrMonth}
+              onChange={(e) => { setBiayaCurrMonthTouched(true); setPeriodForm({ ...periodForm, biayaCurrMonth: e.target.value }) }}
             />
           </div>
         </div>
@@ -344,6 +383,9 @@ function PrintModal({ item, onClose }) {
             Buka WhatsApp
           </a>
         </div>
+        <p className="text-[11px] text-slate-500 mt-2 text-center">
+          Kalau punya 2 WhatsApp di HP, Android akan tanya mau buka pakai app yang mana — pilih WhatsApp Business dan centang "selalu" supaya ke depannya otomatis.
+        </p>
         <button className="text-xs text-slate-500 hover:text-slate-300 mt-3 w-full text-center" onClick={onClose}>Tutup</button>
       </div>
     </div>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy,
 } from 'firebase/firestore'
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { format, parseISO } from 'date-fns'
 import { db } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -127,7 +127,7 @@ export default function Expenses() {
             <p className="text-slate-500 text-sm py-8 text-center">No expenses recorded this month.</p>
           ) : (
             <>
-              <div className="h-64">
+              <div className="h-64 w-full min-w-0 overflow-hidden">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={85} paddingAngle={2}>
@@ -135,9 +135,10 @@ export default function Expenses() {
                     </Pie>
                     <Tooltip
                       contentStyle={{ background: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
+                      labelStyle={{ color: '#F1F5F9' }}
+                      itemStyle={{ color: '#F1F5F9' }}
                       formatter={(value, name, props) => [`${formatIDR(value)} (${props.payload.pct.toFixed(1)}%)`, name]}
                     />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>

@@ -22,7 +22,7 @@ export default function Layout() {
     <div className="min-h-screen flex">
       {/* Mobile top bar */}
       <div className="md:hidden fixed top-0 inset-x-0 h-14 flex items-center justify-between px-4 bg-slate-925/90 backdrop-blur border-b border-white/10 z-40">
-        <span className="font-display font-semibold tracking-tight">Personal Hub</span>
+        <span className="font-display font-semibold tracking-tight text-sm truncate pr-2">Personal Apps Rony Delano</span>
         <button className="btn-ghost !px-2 !py-1" onClick={() => setOpen((o) => !o)} aria-label="Toggle menu">
           {open ? '✕' : '☰'}
         </button>
@@ -37,9 +37,9 @@ export default function Layout() {
           ${open ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
         `}
       >
-        <div className="hidden md:flex items-center gap-2 px-5 h-16 border-b border-white/10">
-          <span className="text-accent text-xl">◆</span>
-          <span className="font-display font-semibold tracking-tight">Personal Hub</span>
+        <div className="hidden md:flex items-center gap-2 px-5 py-3 min-h-16 border-b border-white/10">
+          <span className="text-accent text-xl shrink-0">◆</span>
+          <span className="font-display font-semibold tracking-tight text-sm leading-tight">Personal Apps Rony Delano</span>
         </div>
 
         <nav className="flex-1 px-3 pt-20 md:pt-4 space-y-1">
