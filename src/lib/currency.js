@@ -14,6 +14,15 @@ export function formatNumberID(amount) {
   return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(amount || 0)
 }
 
+// US Dollar formatter — used by the Saham (stocks) menu for USD prices.
+export function formatUSD(amount) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 4,
+  }).format(amount || 0)
+}
+
 // Round up to the nearest whole rupiah (used for "Biaya Per Kwh").
 export function ceilRupiah(n) {
   return Math.ceil(n || 0)
