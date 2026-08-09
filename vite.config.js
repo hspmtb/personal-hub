@@ -36,6 +36,13 @@ export default defineConfig({
       workbox: {
         // Precache the app shell only; never cache API/auth calls.
         globPatterns: ['**/*.{js,css,html,png,svg,ico}'],
+        // A new deploy must take over immediately (not wait for all tabs to
+        // close) and old cached files must be purged — otherwise a browser
+        // can keep serving a stale index.html that references JS/CSS
+        // filenames from a previous build, causing 404s after every update.
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
       },
     }),
   ],
