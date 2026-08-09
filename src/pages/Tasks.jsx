@@ -3,7 +3,7 @@ import {
   collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
 } from 'firebase/firestore'
 import {
-  format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, addWeeks, addMonths, parseISO,
+  format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, parseISO,
 } from 'date-fns'
 import { db } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -43,15 +43,21 @@ export default function Tasks() {
     return { from: startOfMonth(anchor), to: endOfMonth(anchor) }
   }, [view, anchor])
 
-  const days = useMemo(() => eachDayOfInterval(range), [range])
+  const rangeLabel = useMemo(() => {
+    if (view === 'day') return format(anchor, 'EEEE, MMMM d, yyyy')
+    if (view === 'week') return `${format(range.from, 'MMM d')} – ${format(range.to, 'MMM d, yyyy')}`
+    return format(anchor, 'MMMM yyyy')
+  }, [view, anchor, range])
 
-  // A task "appears" on every day within [startDate, endDate] (inclusive) —
-  // this is what lets a 10-day task be entered once instead of 10 times.
-  function tasksByDay(day) {
-    const dayStr = format(day, 'yyyy-MM-dd')
+  // A task is included whenever its [startDate, endDate] range overlaps the
+  // viewed range at all — this is what makes a task that starts in July and
+  // ends in August still show up when viewing August.
+  function tasksInRange(fromDate, toDate) {
+    const fromStr = format(fromDate, 'yyyy-MM-dd')
+    const toStr = format(toDate, 'yyyy-MM-dd')
     return tasks
-      .filter((t) => t.startDate <= dayStr && t.endDate >= dayStr)
-      .sort((a, b) => a.start.localeCompare(b.start))
+      .filter((t) => t.startDate <= toStr && t.endDate >= fromStr)
+      .sort((a, b) => `${a.startDate}${a.start || ''}`.localeCompare(`${b.startDate}${b.start || ''}`))
   }
 
   function shift(dir) {
@@ -97,6 +103,8 @@ export default function Tasks() {
     await deleteDoc(doc(db, 'tasks', id))
     if (editingId === id) { setEditingId(null); setForm(emptyForm) }
   }
+
+  const items = tasksInRange(range.from, range.to)
 
   return (
     <div className="space-y-6">
@@ -156,50 +164,42 @@ export default function Tasks() {
         </div>
       </form>
 
-      {/* Views */}
-      {view === 'day' ? (
-        <DayList items={tasksByDay(anchor)} onEdit={startEdit} onToggle={toggleDone} onDelete={remove} />
-      ) : (
-        <div className={`grid gap-3 ${view === 'week' ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3 lg:grid-cols-5'}`}>
-          {days.map((day) => (
-            <div key={day.toISOString()} className="card p-3">
-              <div className="label mb-2">{format(day, 'EEE, MMM d')}</div>
-              <DayList compact items={tasksByDay(day)} onEdit={startEdit} onToggle={toggleDone} onDelete={remove} />
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Task list for the selected period */}
+      <div>
+        <div className="label mb-2">{rangeLabel}</div>
+        <AgendaList items={items} view={view} onEdit={startEdit} onToggle={toggleDone} onDelete={remove} />
+      </div>
     </div>
   )
 }
 
-function DayList({ items, onEdit, onToggle, onDelete, compact }) {
-  if (items.length === 0) return <p className="text-slate-500 text-sm">No tasks.</p>
+function AgendaList({ items, view, onEdit, onToggle, onDelete }) {
+  if (items.length === 0) return <p className="text-slate-500 text-sm card p-4">No tasks in this period.</p>
   return (
     <ul className="space-y-2">
       {items.map((t) => {
         const multiDay = t.startDate !== t.endDate
         return (
-          <li key={t.id} className={`flex items-start gap-2 ${compact ? '' : 'card p-3'}`}>
-            <input type="checkbox" checked={!!t.done} onChange={() => onToggle(t)} className="mt-1 accent-teal-400" />
+          <li key={t.id} className="flex items-start gap-2 card p-3">
+            <input type="checkbox" checked={!!t.done} onChange={() => onToggle(t)} className="mt-1 accent-teal-400 shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-sm font-medium ${t.done ? 'line-through text-slate-500' : ''}`}>{t.title}</span>
                 <span className="text-xs text-slate-400 font-mono">{t.start}–{t.end}</span>
-                {multiDay && (
+                {view !== 'day' && (
                   <span className="text-[10px] uppercase tracking-wide text-accent bg-accent/10 rounded px-1.5 py-0.5">
-                    {format(parseISO(t.startDate), 'MMM d')}–{format(parseISO(t.endDate), 'MMM d')}
+                    {multiDay
+                      ? `${format(parseISO(t.startDate), 'MMM d')}–${format(parseISO(t.endDate), 'MMM d')}`
+                      : format(parseISO(t.startDate), 'MMM d')}
                   </span>
                 )}
               </div>
               {t.notes && <p className="text-xs text-slate-500 mt-0.5 truncate">{t.notes}</p>}
             </div>
-            {!compact && (
-              <div className="flex gap-1 shrink-0">
-                <button className="text-xs text-slate-400 hover:text-accent px-1.5" onClick={() => onEdit(t)}>Edit</button>
-                <button className="text-xs text-slate-400 hover:text-rose-400 px-1.5" onClick={() => onDelete(t.id)}>Delete</button>
-              </div>
-            )}
+            <div className="flex gap-1 shrink-0">
+              <button className="text-xs text-slate-400 hover:text-accent px-1.5" onClick={() => onEdit(t)}>Edit</button>
+              <button className="text-xs text-slate-400 hover:text-rose-400 px-1.5" onClick={() => onDelete(t.id)}>Delete</button>
+            </div>
           </li>
         )
       })}

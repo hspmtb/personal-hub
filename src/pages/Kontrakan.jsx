@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  collection, query, where, getDocs, doc, getDoc, setDoc, orderBy, onSnapshot,
+  collection, query, where, getDocs, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, orderBy, onSnapshot, serverTimestamp,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -64,6 +64,10 @@ export default function Kontrakan() {
   const [saveStatus, setSaveStatus] = useState('')
   const [printItem, setPrintItem] = useState(null)
 
+  const [rentalExpenses, setRentalExpenses] = useState([])
+  const [expenseForm, setExpenseForm] = useState({ name: '', amount: '' })
+  const [editingExpenseId, setEditingExpenseId] = useState(null)
+
   // Load master units + bank info once
   useEffect(() => {
     const q = query(collection(db, 'rentalUnits'), where('uid', '==', user.uid), orderBy('createdAt'))
@@ -124,6 +128,16 @@ export default function Kontrakan() {
     load()
     return () => { cancelled = true }
   }, [user, period, prevPeriod])
+
+  // Rental-specific expenses for the currently selected period
+  useEffect(() => {
+    const q = query(collection(db, 'rentalExpenses'), where('uid', '==', user.uid), where('period', '==', period))
+    return onSnapshot(q, (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      list.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))
+      setRentalExpenses(list)
+    })
+  }, [user, period])
 
   // Auto-compute default "Biaya Per Kwh" = ceil(biayaTopup / topupKwh) unless the user manually edited it
   useEffect(() => {
@@ -203,6 +217,33 @@ export default function Kontrakan() {
       adjustBiayaAir: merged.adjustBiayaAir ?? null,
     }, { merge: true })
   }
+
+  async function submitRentalExpense(e) {
+    e.preventDefault()
+    const amount = parseFloat(expenseForm.amount)
+    if (!expenseForm.name.trim() || !amount || amount <= 0) return
+    const payload = { uid: user.uid, period, name: expenseForm.name.trim(), amount }
+    if (editingExpenseId) {
+      await updateDoc(doc(db, 'rentalExpenses', editingExpenseId), payload)
+      setEditingExpenseId(null)
+    } else {
+      await addDoc(collection(db, 'rentalExpenses'), { ...payload, createdAt: serverTimestamp() })
+    }
+    setExpenseForm({ name: '', amount: '' })
+  }
+
+  function startEditRentalExpense(item) {
+    setEditingExpenseId(item.id)
+    setExpenseForm({ name: item.name, amount: String(item.amount) })
+  }
+
+  async function removeRentalExpense(id) {
+    if (!confirm('Hapus pengeluaran ini?')) return
+    await deleteDoc(doc(db, 'rentalExpenses', id))
+    if (editingExpenseId === id) { setEditingExpenseId(null); setExpenseForm({ name: '', amount: '' }) }
+  }
+
+  const totalRentalExpense = rentalExpenses.reduce((s, e) => s + e.amount, 0)
 
   function openPrint(row) {
     const total = row.unit.uangSewa + row.unit.iuranRT + row.adjust + row.unit.uangInternet
@@ -362,6 +403,48 @@ export default function Kontrakan() {
           </table>
         </div>
       )}
+
+      {/* Rental-specific expenses for this period (separate from the main Expenses menu) */}
+      <div className="card p-4 space-y-3">
+        <h2 className="font-display font-medium">Pengeluaran Kontrakan — {MONTHS[monthIdx]} {year}</h2>
+        <form onSubmit={submitRentalExpense} className="grid gap-3 sm:grid-cols-4">
+          <div className="sm:col-span-2">
+            <label className="label mb-1 block">Nama Pengeluaran</label>
+            <input className="input" required value={expenseForm.name} onChange={(e) => setExpenseForm({ ...expenseForm, name: e.target.value })} placeholder="Ganti keran bocor" />
+          </div>
+          <div>
+            <label className="label mb-1 block">Harga</label>
+            <input className="input" type="number" step="1" min="1" required value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} placeholder="150000" />
+          </div>
+          <div className="flex items-end gap-2">
+            <button className="btn-primary flex-1" type="submit">{editingExpenseId ? 'Save' : 'Tambah'}</button>
+            {editingExpenseId && (
+              <button type="button" className="btn-ghost" onClick={() => { setEditingExpenseId(null); setExpenseForm({ name: '', amount: '' }) }}>Batal</button>
+            )}
+          </div>
+        </form>
+
+        {rentalExpenses.length === 0 ? (
+          <p className="text-slate-500 text-sm">Belum ada pengeluaran kontrakan bulan ini.</p>
+        ) : (
+          <>
+            <ul className="space-y-1.5">
+              {rentalExpenses.map((e) => (
+                <li key={e.id} className="flex items-center gap-2 text-sm">
+                  <span className="flex-1 min-w-0 truncate">{e.name}</span>
+                  <span className="font-mono">{formatIDR(e.amount)}</span>
+                  <button className="text-xs text-slate-400 hover:text-accent px-1.5" onClick={() => startEditRentalExpense(e)}>Edit</button>
+                  <button className="text-xs text-slate-400 hover:text-rose-400 px-1.5" onClick={() => removeRentalExpense(e.id)}>Delete</button>
+                </li>
+              ))}
+            </ul>
+            <div className="flex items-center justify-between border-t border-white/10 pt-2 text-sm font-medium">
+              <span>Total Pengeluaran Kontrakan</span>
+              <span className="font-mono">{formatIDR(totalRentalExpense)}</span>
+            </div>
+          </>
+        )}
+      </div>
 
       {printItem && <PrintModal item={printItem} onClose={() => setPrintItem(null)} />}
     </div>
