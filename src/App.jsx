@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard.jsx'
 import Tasks from './pages/Tasks.jsx'
 import Expenses from './pages/Expenses.jsx'
 import Kontrakan from './pages/Kontrakan.jsx'
+import Saham from './pages/Saham.jsx'
 import Documents from './pages/Documents.jsx'
 import Users from './pages/Users.jsx'
 import Settings from './pages/Settings.jsx'
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="tasks" element={<Tasks />} />
         <Route path="expenses" element={<Expenses />} />
         <Route path="kontrakan" element={<Kontrakan />} />
+        <Route path="saham" element={<Saham />} />
         <Route path="documents" element={<Documents />} />
         <Route path="users" element={<Users />} />
         <Route path="settings" element={<Settings />} />
