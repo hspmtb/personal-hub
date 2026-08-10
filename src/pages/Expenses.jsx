@@ -28,7 +28,7 @@ export default function Expenses() {
 
   const categoryById = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c])), [categories])
 
-  const monthExpenses = useMemo(() => expenses.filter((e) => e.date.startsWith(month)), [expenses, month])
+  const monthExpenses = useMemo(() => expenses.filter((e) => (e.date || '').startsWith(month)), [expenses, month])
 
   const totals = useMemo(() => {
     const byCategory = {}
@@ -116,7 +116,7 @@ export default function Expenses() {
         </div>
       </form>
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Pie chart */}
         <div className="card p-4">
           <div className="flex items-baseline justify-between mb-2">
@@ -127,10 +127,10 @@ export default function Expenses() {
             <p className="text-slate-500 text-sm py-8 text-center">No expenses recorded this month.</p>
           ) : (
             <>
-              <div className="h-64 w-full min-w-0 overflow-hidden">
+              <div className="h-64 block w-full max-w-full min-w-0 overflow-hidden mx-auto">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={85} paddingAngle={2}>
+                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={2}>
                       {pieData.map((entry, i) => <Cell key={i} fill={entry.color} stroke="none" />)}
                     </Pie>
                     <Tooltip
