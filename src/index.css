@@ -45,6 +45,19 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   @apply w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-accent/60;
 }
 
+/* Native <select> dropdown popups (the opened list of options) are drawn by
+   the browser/OS using its own light-mode defaults unless the <option>
+   elements are explicitly given dark colors — this applies across every
+   <select className="input"> in the app (Expenses, Settings, Kontrakan,
+   Saham, etc.) without needing to touch each one individually. */
+select.input {
+  color-scheme: dark;
+}
+select.input option {
+  background-color: #111827;
+  color: #F1F5F9;
+}
+
 .btn {
   @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors;
 }
