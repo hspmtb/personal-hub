@@ -189,8 +189,8 @@ function AgendaList({ items, view, onEdit, onToggle, onDelete }) {
                 {view !== 'day' && (
                   <span className="text-[10px] uppercase tracking-wide text-accent bg-accent/10 rounded px-1.5 py-0.5">
                     {multiDay
-                      ? `${format(parseISO(t.startDate), 'MMM d')}–${format(parseISO(t.endDate), 'MMM d')}`
-                      : format(parseISO(t.startDate), 'MMM d')}
+                      ? `${format(parseISO(t.startDate), 'EEE, MMM d')} – ${format(parseISO(t.endDate), 'EEE, MMM d')}`
+                      : format(parseISO(t.startDate), 'EEEE, MMM d')}
                   </span>
                 )}
               </div>
