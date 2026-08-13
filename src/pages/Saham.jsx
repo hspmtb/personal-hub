@@ -1,12 +1,62 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy,
+  collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, serverTimestamp, orderBy,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext.jsx'
 import { formatRpSpaced, formatUsdSpaced } from '../lib/currency'
 
 const LOT_SIZE_INA = 100 // 1 lot IDX = 100 shares
+
+// Shared USD→IDR exchange rate, stored once per user (stockSettings/{uid})
+// and used by both the stock totals and the dividend totals below. On
+// first load with no saved value yet, it tries to fetch a live rate from
+// a free public API; the user can always override or re-fetch manually.
+function useKurs(uid) {
+  const [kurs, setKursState] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [fetching, setFetching] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    getDoc(doc(db, 'stockSettings', uid)).then(async (snap) => {
+      if (cancelled) return
+      if (snap.exists() && snap.data().usdToIdr) {
+        setKursState(snap.data().usdToIdr)
+        setLoading(false)
+      } else {
+        await fetchLive()
+        if (!cancelled) setLoading(false)
+      }
+    }).catch(() => setLoading(false))
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid])
+
+  async function persist(value) {
+    setKursState(value)
+    await setDoc(doc(db, 'stockSettings', uid), { uid, usdToIdr: value, updatedAt: serverTimestamp() }, { merge: true })
+  }
+
+  async function fetchLive() {
+    setFetching(true)
+    setError('')
+    try {
+      const res = await fetch('https://open.er-api.com/v6/latest/USD')
+      const data = await res.json()
+      const rate = data?.rates?.IDR
+      if (rate) await persist(Math.round(rate))
+      else setError('Gagal ambil kurs dari internet.')
+    } catch {
+      setError('Gagal ambil kurs dari internet — cek koneksi.')
+    } finally {
+      setFetching(false)
+    }
+  }
+
+  return { kurs, loading, fetching, error, setKurs: persist, refresh: fetchLive }
+}
 
 function fmt(amount, country) {
   return country === 'USA' ? formatUsdSpaced(amount) : formatRpSpaced(amount)
@@ -59,6 +109,7 @@ function normalizeStock(id, data) {
 
 export default function Saham() {
   const { user } = useAuth()
+  const kursCtl = useKurs(user.uid)
   const [rows, setRows] = useState([])
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState(null)
@@ -298,28 +349,66 @@ export default function Saham() {
           </tbody>
         </table>
         {rows.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-white/10 grid gap-1.5 sm:grid-cols-2 max-w-md text-sm">
-            <span className="text-slate-400">Total Beli INA</span>
-            <span className="font-mono text-right sm:text-left">{formatRpSpaced(totals.beliINA)}</span>
-            <span className="text-slate-400">Total Beli US</span>
-            <span className="font-mono text-right sm:text-left">{formatUsdSpaced(totals.beliUS)}</span>
-            <span className="text-slate-400">Total Profit INA</span>
-            <span className={`font-mono text-right sm:text-left ${totals.profitINA >= 0 ? 'text-accent' : 'text-rose-400'}`}>{formatRpSpaced(totals.profitINA)}</span>
-            <span className="text-slate-400">Total Profit US</span>
-            <span className={`font-mono text-right sm:text-left ${totals.profitUS >= 0 ? 'text-accent' : 'text-rose-400'}`}>{formatUsdSpaced(totals.profitUS)}</span>
+          <div className="mt-3 pt-3 border-t border-white/10 space-y-3">
+            <KursControl ctl={kursCtl} />
+            <div className="grid gap-1.5 sm:grid-cols-2 max-w-md text-sm">
+              <span className="text-slate-400">Total Beli INA</span>
+              <span className="font-mono text-right sm:text-left">{formatRpSpaced(totals.beliINA)}</span>
+              <span className="text-slate-400">Total Beli US</span>
+              <span className="font-mono text-right sm:text-left">{formatUsdSpaced(totals.beliUS)}</span>
+              <span className="text-slate-400">Total Beli US Dalam Rp</span>
+              <span className="font-mono text-right sm:text-left">{formatRpSpaced(totals.beliUS * kursCtl.kurs)}</span>
+              <span className="text-slate-400 font-medium">Total Beli Asset</span>
+              <span className="font-mono text-right sm:text-left font-medium">{formatRpSpaced(totals.beliINA + totals.beliUS * kursCtl.kurs)}</span>
+              <span className="text-slate-400">Total Profit INA</span>
+              <span className={`font-mono text-right sm:text-left ${totals.profitINA >= 0 ? 'text-accent' : 'text-rose-400'}`}>{formatRpSpaced(totals.profitINA)}</span>
+              <span className="text-slate-400">Total Profit US</span>
+              <span className={`font-mono text-right sm:text-left ${totals.profitUS >= 0 ? 'text-accent' : 'text-rose-400'}`}>{formatUsdSpaced(totals.profitUS)}</span>
+              <span className="text-slate-400">Total Profit Dalam Rp</span>
+              <span className={`font-mono text-right sm:text-left ${totals.profitUS >= 0 ? 'text-accent' : 'text-rose-400'}`}>{formatRpSpaced(totals.profitUS * kursCtl.kurs)}</span>
+              <span className="text-slate-400 font-medium">Total All Profit</span>
+              <span className={`font-mono text-right sm:text-left font-medium ${(totals.profitINA + totals.profitUS * kursCtl.kurs) >= 0 ? 'text-accent' : 'text-rose-400'}`}>
+                {formatRpSpaced(totals.profitINA + totals.profitUS * kursCtl.kurs)}
+              </span>
+            </div>
           </div>
         )}
         <p className="text-[11px] text-slate-500 mt-3">Total Profit hanya menjumlahkan saham yang sudah ada harga jualnya (yang belum dijual tidak ikut dihitung).</p>
       </div>
 
-      <DividendSection />
+      <DividendSection kurs={kursCtl.kurs} />
     </div>
   )
 }
 
 const emptyDividendForm = { tanggal: '', namaSaham: '', country: 'INA', jumlah: '' }
 
-function DividendSection() {
+function KursControl({ ctl }) {
+  const [draft, setDraft] = useState(String(ctl.kurs))
+
+  useEffect(() => { setDraft(String(ctl.kurs)) }, [ctl.kurs])
+
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <div>
+        <label className="label mb-1 block">Kurs USD → IDR</label>
+        <input
+          className="input w-40" type="number" step="1"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => { const v = parseFloat(draft) || 0; if (v !== ctl.kurs) ctl.setKurs(v) }}
+        />
+      </div>
+      <button type="button" className="btn-ghost text-xs" onClick={ctl.refresh} disabled={ctl.fetching}>
+        {ctl.fetching ? 'Mengambil…' : 'Refresh dari internet'}
+      </button>
+      {ctl.loading && <span className="text-xs text-slate-500">Memuat kurs…</span>}
+      {ctl.error && <span className="text-xs text-rose-400">{ctl.error}</span>}
+    </div>
+  )
+}
+
+function DividendSection({ kurs }) {
   const { user } = useAuth()
   const [rows, setRows] = useState([])
   const [form, setForm] = useState(emptyDividendForm)
@@ -415,6 +504,10 @@ function DividendSection() {
             <span className="font-mono text-right sm:text-left">{formatRpSpaced(totals.ina)}</span>
             <span>Total Dividen US</span>
             <span className="font-mono text-right sm:text-left">{formatUsdSpaced(totals.us)}</span>
+            <span>Total Dividen US Dalam Rp</span>
+            <span className="font-mono text-right sm:text-left">{formatRpSpaced(totals.us * kurs)}</span>
+            <span>Total All Dividen</span>
+            <span className="font-mono text-right sm:text-left">{formatRpSpaced(totals.ina + totals.us * kurs)}</span>
           </div>
         </>
       )}

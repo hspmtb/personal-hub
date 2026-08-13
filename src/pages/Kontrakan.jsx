@@ -481,12 +481,25 @@ function PrintModal({ item, onClose }) {
   )
 }
 
-const emptyIncomeForm = { monthIdx: new Date().getMonth(), amount: '' }
+const emptyIncomeForm = { monthIdx: new Date().getMonth(), grossIncome: '', expense: '' }
+
+// Older entries only had a single `amount` field (before Gross/Expense were
+// split out). Treat that as Gross Income with zero Expense so nothing breaks.
+function normalizeIncome(id, data) {
+  const grossIncome = data.grossIncome ?? data.amount ?? 0
+  const expense = data.expense ?? 0
+  return { id, ...data, grossIncome, expense, netIncome: grossIncome - expense }
+}
 
 // Yearly rent-income tracker: one entry per period (month), scoped to the
 // year currently selected at the top of the Kontrakan page. Kept in its
 // own component so its Firestore listener only re-subscribes when the
 // year actually changes, not on every keystroke elsewhere on the page.
+//
+// The year dropdown at the top of the page already allows picking any year
+// from (current year − 3) to (current year + 1), so entering a missed
+// month from a prior year (e.g. December 2026 while now in 2027) is always
+// possible — just switch the year selector, no extra date restriction here.
 function RentalIncomeSection({ year, uid }) {
   const [rows, setRows] = useState([])
   const [form, setForm] = useState(emptyIncomeForm)
@@ -498,21 +511,26 @@ function RentalIncomeSection({ year, uid }) {
     const q = query(collection(db, 'rentalIncomes'), where('uid', '==', uid))
     return onSnapshot(q, (snap) => {
       const list = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
+        .map((d) => normalizeIncome(d.id, d.data()))
         .filter((r) => r.period.startsWith(String(year)))
       list.sort((a, b) => a.period.localeCompare(b.period))
       setRows(list)
     })
   }, [uid, year])
 
-  const total = rows.reduce((s, r) => s + r.amount, 0)
+  const totals = useMemo(() => {
+    let gross = 0, expense = 0
+    for (const r of rows) { gross += r.grossIncome; expense += r.expense }
+    return { gross, expense, net: gross - expense }
+  }, [rows])
 
   async function handleSubmit(e) {
     e.preventDefault()
-    const amount = parseFloat(form.amount)
-    if (!amount || amount <= 0) return
+    const grossIncome = parseFloat(form.grossIncome) || 0
+    const expense = parseFloat(form.expense) || 0
+    if (!grossIncome && !expense) return
     const period = `${year}-${String(Number(form.monthIdx) + 1).padStart(2, '0')}`
-    const payload = { uid, period, amount }
+    const payload = { uid, period, grossIncome, expense }
     if (editingId) {
       await updateDoc(doc(db, 'rentalIncomes', editingId), payload)
       setEditingId(null)
@@ -525,7 +543,7 @@ function RentalIncomeSection({ year, uid }) {
   function startEdit(r) {
     setEditingId(r.id)
     const [, m] = r.period.split('-')
-    setForm({ monthIdx: Number(m) - 1, amount: String(r.amount) })
+    setForm({ monthIdx: Number(m) - 1, grossIncome: String(r.grossIncome), expense: String(r.expense) })
   }
 
   async function remove(id) {
@@ -543,15 +561,19 @@ function RentalIncomeSection({ year, uid }) {
     <div className="card p-4 space-y-3">
       <h2 className="font-display font-medium">Pemasukan Periode {year}</h2>
       <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-4">
-        <div className="sm:col-span-2">
+        <div>
           <label className="label mb-1 block">Periode</label>
           <select className="input" value={form.monthIdx} onChange={(e) => setForm({ ...form, monthIdx: e.target.value })}>
             {MONTHS.map((m, i) => <option key={m} value={i}>{m} {year}</option>)}
           </select>
         </div>
         <div>
-          <label className="label mb-1 block">Pemasukan</label>
-          <input className="input" type="number" step="1" min="1" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="30000000" />
+          <label className="label mb-1 block">Gross Income</label>
+          <input className="input" type="number" step="1" min="0" value={form.grossIncome} onChange={(e) => setForm({ ...form, grossIncome: e.target.value })} placeholder="30000000" />
+        </div>
+        <div>
+          <label className="label mb-1 block">Expense</label>
+          <input className="input" type="number" step="1" min="0" value={form.expense} onChange={(e) => setForm({ ...form, expense: e.target.value })} placeholder="0" />
         </div>
         <div className="flex items-end gap-2">
           <button className="btn-primary flex-1" type="submit">{editingId ? 'Save' : 'Tambah'}</button>
@@ -559,25 +581,48 @@ function RentalIncomeSection({ year, uid }) {
             <button type="button" className="btn-ghost" onClick={() => { setEditingId(null); setForm(emptyIncomeForm) }}>Batal</button>
           )}
         </div>
+        <p className="sm:col-span-4 text-[11px] text-slate-500 -mt-1">Net Income dihitung otomatis = Gross Income − Expense.</p>
       </form>
 
       {rows.length === 0 ? (
         <p className="text-slate-500 text-sm">Belum ada pemasukan tahun ini.</p>
       ) : (
         <>
-          <ul className="space-y-1.5">
-            {rows.map((r) => (
-              <li key={r.id} className="flex items-center gap-2 text-sm">
-                <span className="flex-1 min-w-0 truncate">{periodLabel(r.period)}</span>
-                <span className="font-mono">{formatIDR(r.amount)}</span>
-                <button className="text-xs text-slate-400 hover:text-accent px-1.5" onClick={() => startEdit(r)}>Edit</button>
-                <button className="text-xs text-slate-400 hover:text-rose-400 px-1.5" onClick={() => remove(r.id)}>Delete</button>
-              </li>
-            ))}
-          </ul>
-          <div className="flex items-center justify-between border-t border-white/10 pt-2 text-sm font-medium">
-            <span>Total Pemasukan {year}</span>
-            <span className="font-mono">{formatIDR(total)}</span>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead>
+                <tr className="text-left text-slate-500 text-xs uppercase">
+                  <th className="py-1.5 pr-3">Periode</th>
+                  <th className="py-1.5 pr-3">Gross Income</th>
+                  <th className="py-1.5 pr-3">Expense</th>
+                  <th className="py-1.5 pr-3">Net Income</th>
+                  <th className="py-1.5"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-t border-white/5">
+                    <td className="py-1.5 pr-3">{periodLabel(r.period)}</td>
+                    <td className="py-1.5 pr-3 font-mono">{formatIDR(r.grossIncome)}</td>
+                    <td className="py-1.5 pr-3 font-mono">{formatIDR(r.expense)}</td>
+                    <td className={`py-1.5 pr-3 font-mono ${r.netIncome >= 0 ? 'text-accent' : 'text-rose-400'}`}>{formatIDR(r.netIncome)}</td>
+                    <td className="py-1.5 whitespace-nowrap">
+                      <button className="text-xs text-slate-400 hover:text-accent px-1.5" onClick={() => startEdit(r)}>Edit</button>
+                      <button className="text-xs text-slate-400 hover:text-rose-400 px-1.5" onClick={() => remove(r.id)}>Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-white/10 font-medium">
+                  <td className="py-2 pr-3">Total {year}</td>
+                  <td className="py-2 pr-3 font-mono">{formatIDR(totals.gross)}</td>
+                  <td className="py-2 pr-3 font-mono">{formatIDR(totals.expense)}</td>
+                  <td className={`py-2 pr-3 font-mono ${totals.net >= 0 ? 'text-accent' : 'text-rose-400'}`}>{formatIDR(totals.net)}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         </>
       )}
