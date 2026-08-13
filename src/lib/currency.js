@@ -27,3 +27,15 @@ export function formatUSD(amount) {
 export function ceilRupiah(n) {
   return Math.ceil(n || 0)
 }
+
+// "Rp 20,000,000" / "$ 265.46" — space-separated style used specifically by
+// the Saham (stocks) and dividend tables. Kept separate from formatIDR/
+// formatUSD above so the existing look of Expenses/Dashboard/Kontrakan is
+// untouched.
+export function formatRpSpaced(amount) {
+  return `Rp ${Math.round(amount || 0).toLocaleString('en-US')}`
+}
+
+export function formatUsdSpaced(amount) {
+  return `$ ${(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
