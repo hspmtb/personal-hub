@@ -446,6 +446,8 @@ export default function Kontrakan() {
         )}
       </div>
 
+      <RentalIncomeSection year={year} uid={user.uid} />
+
       {printItem && <PrintModal item={printItem} onClose={() => setPrintItem(null)} />}
     </div>
   )
@@ -475,6 +477,110 @@ function PrintModal({ item, onClose }) {
         </p>
         <button className="text-xs text-slate-500 hover:text-slate-300 mt-3 w-full text-center" onClick={onClose}>Tutup</button>
       </div>
+    </div>
+  )
+}
+
+const emptyIncomeForm = { monthIdx: new Date().getMonth(), amount: '' }
+
+// Yearly rent-income tracker: one entry per period (month), scoped to the
+// year currently selected at the top of the Kontrakan page. Kept in its
+// own component so its Firestore listener only re-subscribes when the
+// year actually changes, not on every keystroke elsewhere on the page.
+function RentalIncomeSection({ year, uid }) {
+  const [rows, setRows] = useState([])
+  const [form, setForm] = useState(emptyIncomeForm)
+  const [editingId, setEditingId] = useState(null)
+
+  useEffect(() => {
+    // Fetch by uid only (no range query needed) and filter to this year
+    // client-side — avoids needing an extra composite index.
+    const q = query(collection(db, 'rentalIncomes'), where('uid', '==', uid))
+    return onSnapshot(q, (snap) => {
+      const list = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((r) => r.period.startsWith(String(year)))
+      list.sort((a, b) => a.period.localeCompare(b.period))
+      setRows(list)
+    })
+  }, [uid, year])
+
+  const total = rows.reduce((s, r) => s + r.amount, 0)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    const amount = parseFloat(form.amount)
+    if (!amount || amount <= 0) return
+    const period = `${year}-${String(Number(form.monthIdx) + 1).padStart(2, '0')}`
+    const payload = { uid, period, amount }
+    if (editingId) {
+      await updateDoc(doc(db, 'rentalIncomes', editingId), payload)
+      setEditingId(null)
+    } else {
+      await addDoc(collection(db, 'rentalIncomes'), { ...payload, createdAt: serverTimestamp() })
+    }
+    setForm(emptyIncomeForm)
+  }
+
+  function startEdit(r) {
+    setEditingId(r.id)
+    const [, m] = r.period.split('-')
+    setForm({ monthIdx: Number(m) - 1, amount: String(r.amount) })
+  }
+
+  async function remove(id) {
+    if (!confirm('Hapus pemasukan ini?')) return
+    await deleteDoc(doc(db, 'rentalIncomes', id))
+    if (editingId === id) { setEditingId(null); setForm(emptyIncomeForm) }
+  }
+
+  function periodLabel(period) {
+    const [y, m] = period.split('-')
+    return `${MONTHS[Number(m) - 1]} ${y}`
+  }
+
+  return (
+    <div className="card p-4 space-y-3">
+      <h2 className="font-display font-medium">Pemasukan Periode {year}</h2>
+      <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-4">
+        <div className="sm:col-span-2">
+          <label className="label mb-1 block">Periode</label>
+          <select className="input" value={form.monthIdx} onChange={(e) => setForm({ ...form, monthIdx: e.target.value })}>
+            {MONTHS.map((m, i) => <option key={m} value={i}>{m} {year}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label mb-1 block">Pemasukan</label>
+          <input className="input" type="number" step="1" min="1" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="30000000" />
+        </div>
+        <div className="flex items-end gap-2">
+          <button className="btn-primary flex-1" type="submit">{editingId ? 'Save' : 'Tambah'}</button>
+          {editingId && (
+            <button type="button" className="btn-ghost" onClick={() => { setEditingId(null); setForm(emptyIncomeForm) }}>Batal</button>
+          )}
+        </div>
+      </form>
+
+      {rows.length === 0 ? (
+        <p className="text-slate-500 text-sm">Belum ada pemasukan tahun ini.</p>
+      ) : (
+        <>
+          <ul className="space-y-1.5">
+            {rows.map((r) => (
+              <li key={r.id} className="flex items-center gap-2 text-sm">
+                <span className="flex-1 min-w-0 truncate">{periodLabel(r.period)}</span>
+                <span className="font-mono">{formatIDR(r.amount)}</span>
+                <button className="text-xs text-slate-400 hover:text-accent px-1.5" onClick={() => startEdit(r)}>Edit</button>
+                <button className="text-xs text-slate-400 hover:text-rose-400 px-1.5" onClick={() => remove(r.id)}>Delete</button>
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-center justify-between border-t border-white/10 pt-2 text-sm font-medium">
+            <span>Total Pemasukan {year}</span>
+            <span className="font-mono">{formatIDR(total)}</span>
+          </div>
+        </>
+      )}
     </div>
   )
 }
