@@ -448,6 +448,8 @@ export default function Kontrakan() {
 
       <RentalIncomeSection year={year} uid={user.uid} />
 
+      <ConstructionCostSection uid={user.uid} />
+
       {printItem && <PrintModal item={printItem} onClose={() => setPrintItem(null)} />}
     </div>
   )
@@ -623,6 +625,133 @@ function RentalIncomeSection({ year, uid }) {
                 </tr>
               </tfoot>
             </table>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+const SUMBER_OPTIONS = ['Santy', 'Rony', 'Yanny']
+const emptyConstructionForm = { tanggal: '', nominal: '', sumber: SUMBER_OPTIONS[0], keterangan: '' }
+
+// Construction-cost ledger — not scoped to a year (it's a one-off build
+// project), so it lists everything ever entered for this rental property.
+function ConstructionCostSection({ uid }) {
+  const [rows, setRows] = useState([])
+  const [form, setForm] = useState(emptyConstructionForm)
+  const [editingId, setEditingId] = useState(null)
+
+  useEffect(() => {
+    const q = query(collection(db, 'rentalConstruction'), where('uid', '==', uid))
+    return onSnapshot(q, (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      list.sort((a, b) => a.tanggal.localeCompare(b.tanggal))
+      setRows(list)
+    })
+  }, [uid])
+
+  const totalsBySumber = useMemo(() => {
+    const totals = Object.fromEntries(SUMBER_OPTIONS.map((s) => [s, 0]))
+    for (const r of rows) totals[r.sumber] = (totals[r.sumber] || 0) + r.nominal
+    return totals
+  }, [rows])
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    const nominal = parseFloat(form.nominal)
+    if (!form.tanggal || !nominal || nominal <= 0) return
+    const payload = { uid, tanggal: form.tanggal, nominal, sumber: form.sumber, keterangan: form.keterangan.trim() }
+    if (editingId) {
+      await updateDoc(doc(db, 'rentalConstruction', editingId), payload)
+      setEditingId(null)
+    } else {
+      await addDoc(collection(db, 'rentalConstruction'), { ...payload, createdAt: serverTimestamp() })
+    }
+    setForm(emptyConstructionForm)
+  }
+
+  function startEdit(r) {
+    setEditingId(r.id)
+    setForm({ tanggal: r.tanggal, nominal: String(r.nominal), sumber: r.sumber, keterangan: r.keterangan || '' })
+  }
+
+  async function remove(id) {
+    if (!confirm('Hapus biaya pembangunan ini?')) return
+    await deleteDoc(doc(db, 'rentalConstruction', id))
+    if (editingId === id) { setEditingId(null); setForm(emptyConstructionForm) }
+  }
+
+  return (
+    <div className="card p-4 space-y-3">
+      <h2 className="font-display font-medium">Biaya Pembangunan Kontrakan</h2>
+
+      <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div>
+          <label className="label mb-1 block">Tanggal</label>
+          <input className="input" type="date" required value={form.tanggal} onChange={(e) => setForm({ ...form, tanggal: e.target.value })} />
+        </div>
+        <div>
+          <label className="label mb-1 block">Nominal</label>
+          <input className="input" type="number" step="1" min="1" required value={form.nominal} onChange={(e) => setForm({ ...form, nominal: e.target.value })} placeholder="1000000" />
+        </div>
+        <div>
+          <label className="label mb-1 block">Sumber</label>
+          <select className="input" value={form.sumber} onChange={(e) => setForm({ ...form, sumber: e.target.value })}>
+            {SUMBER_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div className="lg:col-span-1">
+          <label className="label mb-1 block">Keterangan</label>
+          <input className="input" value={form.keterangan} onChange={(e) => setForm({ ...form, keterangan: e.target.value })} placeholder="Bayar Kontraktor" />
+        </div>
+        <div className="flex items-end gap-2">
+          <button className="btn-primary flex-1" type="submit">{editingId ? 'Save' : 'Tambah'}</button>
+          {editingId && (
+            <button type="button" className="btn-ghost" onClick={() => { setEditingId(null); setForm(emptyConstructionForm) }}>Batal</button>
+          )}
+        </div>
+      </form>
+
+      {rows.length === 0 ? (
+        <p className="text-slate-500 text-sm">Belum ada biaya pembangunan.</p>
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[600px]">
+              <thead>
+                <tr className="text-left text-slate-500 text-xs uppercase">
+                  <th className="py-1.5 pr-3">Tanggal</th>
+                  <th className="py-1.5 pr-3">Nominal</th>
+                  <th className="py-1.5 pr-3">Sumber</th>
+                  <th className="py-1.5 pr-3">Keterangan</th>
+                  <th className="py-1.5"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-t border-white/5">
+                    <td className="py-1.5 pr-3 font-mono">{r.tanggal}</td>
+                    <td className="py-1.5 pr-3 font-mono">{formatIDR(r.nominal)}</td>
+                    <td className="py-1.5 pr-3">{r.sumber}</td>
+                    <td className="py-1.5 pr-3">{r.keterangan || '—'}</td>
+                    <td className="py-1.5 whitespace-nowrap">
+                      <button className="text-xs text-slate-400 hover:text-accent px-1.5" onClick={() => startEdit(r)}>Edit</button>
+                      <button className="text-xs text-slate-400 hover:text-rose-400 px-1.5" onClick={() => remove(r.id)}>Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="border-t border-white/10 pt-2 grid gap-1.5 max-w-xs text-sm font-medium">
+            {SUMBER_OPTIONS.map((s) => (
+              <div key={s} className="flex items-center justify-between">
+                <span>{s}</span>
+                <span className="font-mono">{formatIDR(totalsBySumber[s])}</span>
+              </div>
+            ))}
           </div>
         </>
       )}
