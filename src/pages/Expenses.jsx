@@ -17,6 +17,7 @@ export default function Expenses() {
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState(null)
   const [month, setMonth] = useState(format(new Date(), 'yyyy-MM'))
+  const [selectedCategory, setSelectedCategory] = useState(null)
 
   useEffect(() => {
     const q1 = query(collection(db, 'expenseCategories'), where('uid', '==', user.uid), orderBy('name'))
@@ -43,6 +44,7 @@ export default function Expenses() {
   const pieData = useMemo(
     () =>
       Object.entries(totals.byCategory).map(([catId, amount]) => ({
+        catId,
         name: categoryById[catId]?.name || 'Uncategorized',
         value: amount,
         color: categoryById[catId]?.color || '#64748b',
@@ -50,6 +52,21 @@ export default function Expenses() {
       })),
     [totals, categoryById],
   )
+
+  // Reset the category filter whenever the viewed month changes or the
+  // selected category no longer has any transactions this month.
+  useEffect(() => {
+    setSelectedCategory(null)
+  }, [month])
+
+  const displayedExpenses = useMemo(
+    () => (selectedCategory ? monthExpenses.filter((e) => e.categoryId === selectedCategory) : monthExpenses),
+    [monthExpenses, selectedCategory],
+  )
+
+  function toggleCategory(catId) {
+    setSelectedCategory((current) => (current === catId ? null : catId))
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -131,7 +148,16 @@ export default function Expenses() {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={2}>
-                      {pieData.map((entry, i) => <Cell key={i} fill={entry.color} stroke="none" />)}
+                      {pieData.map((entry, i) => (
+                        <Cell
+                          key={i}
+                          fill={entry.color}
+                          stroke="none"
+                          cursor="pointer"
+                          opacity={selectedCategory && selectedCategory !== entry.catId ? 0.35 : 1}
+                          onClick={() => toggleCategory(entry.catId)}
+                        />
+                      ))}
                     </Pie>
                     <Tooltip
                       contentStyle={{ background: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
@@ -143,12 +169,18 @@ export default function Expenses() {
                 </ResponsiveContainer>
               </div>
 
-              {/* Explicit per-category breakdown, e.g. "Coffee — Rp500.000 (5%)" */}
+              {/* Explicit per-category breakdown, e.g. "Coffee — Rp500.000 (5%)" — click to filter Transactions */}
               <ul className="mt-3 space-y-1.5 text-sm border-t border-white/10 pt-3">
                 {[...pieData].sort((a, b) => b.value - a.value).map((c) => (
-                  <li key={c.name} className="flex items-center gap-2">
+                  <li
+                    key={c.name}
+                    onClick={() => toggleCategory(c.catId)}
+                    className={`flex items-center gap-2 rounded-md px-1.5 py-1 -mx-1.5 cursor-pointer transition-colors ${
+                      selectedCategory === c.catId ? 'bg-accent/10' : 'hover:bg-white/5'
+                    }`}
+                  >
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color }} />
-                    <span className="flex-1 truncate">{c.name}</span>
+                    <span className={`flex-1 truncate ${selectedCategory === c.catId ? 'text-accent' : ''}`}>{c.name}</span>
                     <span className="font-mono text-slate-300">{formatIDR(c.value)}</span>
                     <span className="text-slate-500 w-14 text-right shrink-0">{c.pct.toFixed(1)}%</span>
                   </li>
@@ -159,13 +191,25 @@ export default function Expenses() {
         </div>
 
         {/* List for the month */}
-        <div className="card p-4">
-          <h2 className="font-display font-medium mb-3">Transactions</h2>
-          {monthExpenses.length === 0 ? (
-            <p className="text-slate-500 text-sm">No transactions.</p>
+        <div className="card p-4" onClick={(e) => { if (e.target === e.currentTarget) setSelectedCategory(null) }}>
+          <div className="flex items-center justify-between mb-3 gap-2">
+            <h2 className="font-display font-medium">
+              Transactions
+              {selectedCategory && (
+                <span className="text-slate-400 font-normal"> — {categoryById[selectedCategory]?.name || 'Uncategorized'}</span>
+              )}
+            </h2>
+            {selectedCategory && (
+              <button className="text-xs text-accent hover:underline shrink-0" onClick={() => setSelectedCategory(null)}>
+                Show all
+              </button>
+            )}
+          </div>
+          {displayedExpenses.length === 0 ? (
+            <p className="text-slate-500 text-sm">No transactions{selectedCategory ? ' for this category.' : '.'}</p>
           ) : (
             <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
-              {monthExpenses.map((e) => (
+              {displayedExpenses.map((e) => (
                 <li key={e.id} className="flex items-center gap-2 text-sm">
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ background: categoryById[e.categoryId]?.color || '#64748b' }} />
                   <span className="text-slate-400 font-mono text-xs w-20 shrink-0">{format(parseISO(e.date), 'MMM d')}</span>
