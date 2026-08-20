@@ -38,6 +38,30 @@ export function AuthProvider({ children }) {
     return unsub
   }, [])
 
+  // Auto-logout setelah tidak ada aktivitas selama beberapa menit
+  useEffect(() => {
+    if (!user) return // cuma jalan kalau lagi login
+
+    const TIMEOUT_MS = 5 * 60 * 1000 // 5 menit — ganti angka ini kalau mau beda
+    let timer
+
+    function resetTimer() {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        logout()
+      }, TIMEOUT_MS)
+    }
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll']
+    events.forEach((evt) => window.addEventListener(evt, resetTimer))
+    resetTimer() // mulai hitung begitu user login
+
+    return () => {
+      clearTimeout(timer)
+      events.forEach((evt) => window.removeEventListener(evt, resetTimer))
+    }
+  }, [user])
+
   async function login(email, password) {
     await signInWithEmailAndPassword(auth, email, password)
   }
