@@ -42,7 +42,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!user) return // cuma jalan kalau lagi login
 
-    const TIMEOUT_MS = 10 * 1000 // 5 menit — ganti angka ini kalau mau beda
+    const TIMEOUT_MS = 10 * 60 * 1000 // 5 menit — ganti angka ini kalau mau beda
     let timer
 
     function resetTimer() {
