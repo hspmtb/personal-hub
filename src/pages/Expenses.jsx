@@ -213,7 +213,7 @@ export default function Expenses() {
                 <li key={e.id} className="flex items-center gap-2 text-sm">
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ background: categoryById[e.categoryId]?.color || '#64748b' }} />
                   <span className="text-slate-400 font-mono text-xs w-20 shrink-0">{format(parseISO(e.date), 'MMM d')}</span>
-                  <span className="flex-1 min-w-0 truncate">{categoryById[e.categoryId]?.name || 'Uncategorized'}{e.note ? ` — ${e.note}` : ''}</span>
+                  <span className="flex-1 min-w-0 truncate">{e.note ? `${e.note} - ` : ''}{categoryById[e.categoryId]?.name || 'Uncategorized'}</span>
                   <span className="font-mono shrink-0">{formatIDR(e.amount)}</span>
                   <button className="text-xs text-slate-400 hover:text-accent px-1" onClick={() => startEdit(e)}>Edit</button>
                   <button className="text-xs text-slate-400 hover:text-rose-400 px-1" onClick={() => remove(e.id)}>Delete</button>
